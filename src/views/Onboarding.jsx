@@ -10,7 +10,7 @@ const g = GEMS.dashboard;
 export default function Onboarding() {
   const { authStep, setAuthStep, sendOTP, verifyOTP, signInWithGoogle, completeOnboarding } = useAuth();
   const [email, setEmail]           = useState('');
-  const [otp, setOtp]               = useState(['','','','','','','','']);
+  const [otp, setOtp]               = useState(['','','','','','']);
   const [error, setError]           = useState('');
   const [sending, setSending]       = useState(false);
   const [verifying, setVerifying]   = useState(false);
@@ -39,7 +39,7 @@ export default function Onboarding() {
 
   const handleVerifyOTP = async () => {
     const code = otp.join('');
-    if (code.length < 8) { setError('Please enter the full 8-digit code'); return; }
+    if (code.length < 6) { setError('Please enter the full 6-digit code'); return; }
     setVerifying(true); setError('');
     const { error } = await verifyOTP(email.trim(), code);
     setVerifying(false);
@@ -95,7 +95,7 @@ export default function Onboarding() {
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 32 }}>📧</div>
         <Text size={22} bold g={g}>Enter your email</Text>
-        <br /><Text size={13} muted g={g}>We'll send you an 8-digit sign-in code</Text>
+        <br /><Text size={13} muted g={g}>We'll send you a 6-digit sign-in code</Text>
       </div>
       <Input g={g} type="email" placeholder="you@gmail.com"
         value={email} onChange={e => setEmail(e.target.value)}
@@ -120,7 +120,7 @@ export default function Onboarding() {
         <Text size={22} bold g={g}>Check your inbox</Text>
         <br />
         <Text size={13} muted g={g}>
-          Enter the 8-digit code sent to <strong>{email}</strong>
+          Enter the 6-digit code sent to <strong>{email}</strong>
         </Text>
         <br />
         <Text size={12} muted g={g}>Also check your spam folder</Text>
@@ -134,7 +134,7 @@ export default function Onboarding() {
               const val = e.target.value.replace(/\D/g, '');
               const next = [...otp]; next[i] = val;
               setOtp(next);
-              if (val && i < 7) document.getElementById(`otp-${i+1}`)?.focus();
+              if (val && i < 5) document.getElementById(`otp-${i+1}`)?.focus();
             }}
             onKeyDown={e => {
               if (e.key === 'Backspace' && !otp[i] && i > 0)
@@ -144,9 +144,9 @@ export default function Onboarding() {
               e.preventDefault();
               const pasted = e.clipboardData.getData('text').replace(/\D/g,'').slice(0,6);
               const next = [...otp];
-              pasted.split('').forEach((c, idx) => { if (idx < 8) next[idx] = c; });
+              pasted.split('').forEach((c, idx) => { if (idx < 6) next[idx] = c; });
               setOtp(next);
-              document.getElementById(`otp-${Math.min(pasted.length, 7)}`)?.focus();
+              document.getElementById(`otp-${Math.min(pasted.length, 5)}`)?.focus();
             }}
             style={{ width: 46, height: 56, textAlign: 'center', fontSize: 24,
               fontWeight: 700, background: 'rgba(255,255,255,0.85)',
@@ -160,16 +160,16 @@ export default function Onboarding() {
       {error && <Text size={12} color={g.urgentBar}>{error}</Text>}
 
       <button onClick={handleVerifyOTP} disabled={verifying}
-        style={{ ...bigBtn(g.card), opacity: verifying || otp.join('').length < 8 ? 0.5 : 1 }}>
+        style={{ ...bigBtn(g.card), opacity: verifying || otp.join('').length < 6 ? 0.5 : 1 }}>
         {verifying ? 'Verifying…' : 'Verify →'}
       </button>
 
       <div style={{ display: 'flex', gap: 16 }}>
-        <button onClick={() => { setOtp(['','','','','','','','']); setError(''); handleSendOTP(); }}
+        <button onClick={() => { setOtp(['','','','','','']); setError(''); handleSendOTP(); }}
           style={{ background: 'none', border: 'none', color: g.accent, fontSize: 13, cursor: 'pointer' }}>
           Resend code
         </button>
-        <button onClick={() => { setAuthStep('otp'); setError(''); setOtp(['','','','','','','','']); }}
+        <button onClick={() => { setAuthStep('otp'); setError(''); setOtp(['','','','','','']); }}
           style={{ background: 'none', border: 'none', color: g.muted, fontSize: 13, cursor: 'pointer' }}>
           ← Change email
         </button>
