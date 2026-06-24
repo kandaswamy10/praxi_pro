@@ -9,10 +9,19 @@ export const supabase = createClient(
 // ── AUTH HELPERS ──────────────────────────────────────────────────────────────
 
 export const sendOTP = (email) =>
-  supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: `${import.meta.env.VITE_APP_URL || 'https://praxi-pro.vercel.app'}/auth/callback`,
+    },
+  });
 
 export const verifyOTP = (email, token) =>
   supabase.auth.verifyOtp({ email, token, type: 'email' });
+
+export const handleAuthCallback = () =>
+  supabase.auth.getSessionFromUrl({ reuse_existing: false });
 
 export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
