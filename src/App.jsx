@@ -53,10 +53,16 @@ function AppInner() {
   if (loading) return (
     <div style={{ minHeight: '100vh', background: GEMS.dashboard.bg,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexDirection: 'column', gap: 16 }}>
+      flexDirection: 'column', gap: 16, fontFamily: 'system-ui' }}>
       <div style={{ fontSize: 32, fontWeight: 800, color: GEMS.dashboard.text,
         fontFamily: 'Georgia, serif' }}>Praxi Pro</div>
-      <div style={{ fontSize: 13, color: GEMS.dashboard.muted }}>Loading…</div>
+      <div style={{ fontSize: 13, color: GEMS.dashboard.muted, fontStyle: 'italic' }}>
+        Plan. Learn. Relax.
+      </div>
+      <div style={{ width: 40, height: 40, border: `3px solid ${GEMS.dashboard.card}`,
+        borderTopColor: 'transparent', borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite' }} />
+      <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
     </div>
   );
 
