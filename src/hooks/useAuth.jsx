@@ -13,48 +13,85 @@ export function AuthProvider({ children }) {
   const [authStep, setAuthStep] = useState('welcome');
 
   useEffect(() => {
+    // Check existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) loadProfile(session.user);
-      else setLoading(false);
+      if (session) {
+        loadProfile(session.user);
+      } else {
+        setLoading(false);
+      }
     });
 
+    // Listen for auth changes (OTP verify, Google OAuth callback)
     const { data: { subscription } } = onAuthChange((session) => {
       setSession(session);
-      if (session) loadProfile(session.user);
-      else { setProfile(null); setLoading(false); }
+      if (session) {
+        loadProfile(session.user);
+      } else {
+        setProfile(null);
+        setLoading(false);
+        setAuthStep('welcome');
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const loadProfile = async (user) => {
-    const { data } = await cloud.getProfile(user.id);
-    if (data) {
-      setProfile(data);
-      setAuthStep('done');
-    } else {
-      setProfile({
+    try {
+      const { data, error } = await cloud.getProfile(user.id);
+      if (data && !error) {
+        // Existing user — go straight to app
+        setProfile(data);
+        setAuthStep('done');
+      } else {
+        // New user — build default profile, go to onboarding
+        const defaultProfile = {
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email.split('@')[0],
+          avatar_url: user.user_metadata?.avatar_url || null,
+          storage_mode: 'local',
+          enabled_tabs: ['dashboard', 'work', 'learning', 'personal', 'finance'],
+          pinned_tab: 'dashboard',
+          theme: 'auto',
+          ai_config: DEFAULT_AI_CONFIG,
+        };
+        setProfile(defaultProfile);
+        setAuthStep('storage');
+      }
+    } catch (e) {
+      console.error('loadProfile error:', e);
+      // Still let them through with a default profile
+      const defaultProfile = {
         id: user.id,
         email: user.email,
-        name: user.user_metadata?.full_name || user.email.split('@')[0],
-        avatar_url: user.user_metadata?.avatar_url,
+        name: user.email.split('@')[0],
         storage_mode: 'local',
         enabled_tabs: ['dashboard', 'work', 'learning', 'personal', 'finance'],
         pinned_tab: 'dashboard',
         theme: 'auto',
         ai_config: DEFAULT_AI_CONFIG,
-      });
+      };
+      setProfile(defaultProfile);
       setAuthStep('storage');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const completeOnboarding = useCallback(async (updates) => {
     if (!session) return;
     const merged = { ...profile, ...updates };
     setProfile(merged);
-    await cloud.saveProfile(session.user.id, merged);
+    // Save to Supabase (don't block on error)
+    try {
+      await cloud.saveProfile(session.user.id, merged);
+    } catch (e) {
+      console.warn('Profile save failed, continuing anyway:', e);
+    }
+    // Always advance to app regardless of save success
     setAuthStep('done');
   }, [session, profile]);
 
@@ -62,8 +99,12 @@ export function AuthProvider({ children }) {
     if (!session) return;
     const merged = { ...profile, ...updates };
     setProfile(merged);
-    await cloud.saveProfile(session.user.id, merged);
-    await local.saveProfile(session.user.id, merged);
+    try {
+      await cloud.saveProfile(session.user.id, merged);
+      await local.saveProfile(session.user.id, merged);
+    } catch (e) {
+      console.warn('updateProfile error:', e);
+    }
   }, [session, profile]);
 
   const value = {
@@ -75,7 +116,8 @@ export function AuthProvider({ children }) {
       setProfile(null);
       setAuthStep('welcome');
     },
-    completeOnboarding, updateProfile,
+    completeOnboarding,
+    updateProfile,
   };
 
   return (
