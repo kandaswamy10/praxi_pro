@@ -1,10 +1,7 @@
 // src/hooks/useData.js
-// All CRUD operations for events, goals, topics and link groups.
-// Auto-saves on every mutation via the unified storage layer.
-
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createStore } from '../lib/storage';
-import { useAuth } from './useAuth';
+import { useAuth } from './useAuth.jsx';
 
 function uuid() {
   return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36);
@@ -12,19 +9,18 @@ function uuid() {
 
 export function useData() {
   const { session, profile } = useAuth();
-  const [events, setEvents]       = useState([]);
-  const [goals, setGoals]         = useState([]);
-  const [topics, setTopics]       = useState([]); // flat, all goals
+  const [events, setEvents]         = useState([]);
+  const [goals, setGoals]           = useState([]);
+  const [topics, setTopics]         = useState([]);
   const [linkGroups, setLinkGroups] = useState([]);
-  const [links, setLinks]         = useState([]);
-  const [ready, setReady]         = useState(false);
+  const [links, setLinks]           = useState([]);
+  const [ready, setReady]           = useState(false);
 
   const store = useMemo(() => {
     if (!session || !profile) return null;
     return createStore(session.user.id, profile.storage_mode);
   }, [session, profile?.storage_mode]);
 
-  // Load all data on mount / store change
   useEffect(() => {
     if (!store) return;
     (async () => {
@@ -44,8 +40,6 @@ export function useData() {
     })();
   }, [store]);
 
-  // ── EVENTS ──────────────────────────────────────────────────────────────────
-
   const addEvent = useCallback(async (payload) => {
     const item = { ...payload, id: uuid(), created_at: new Date().toISOString(), is_completed: false, alarm_fired: false };
     setEvents(prev => [item, ...prev]);
@@ -63,8 +57,6 @@ export function useData() {
     setEvents(prev => prev.filter(e => e.id !== id));
     await store?.remove('events', id);
   }, [store]);
-
-  // ── GOALS ───────────────────────────────────────────────────────────────────
 
   const addGoal = useCallback(async (payload) => {
     const item = { ...payload, id: uuid(), completed_hours: 0, is_shared: false, share_token: null, created_at: new Date().toISOString() };
@@ -92,8 +84,6 @@ export function useData() {
     await store?.remove('learning_goals', id);
   }, [store]);
 
-  // ── TOPICS ──────────────────────────────────────────────────────────────────
-
   const addTopic = useCallback(async (goalId, payload) => {
     const item = { ...payload, id: uuid(), goal_id: goalId, is_completed: false, quiz: [], created_at: new Date().toISOString() };
     setTopics(prev => [...prev, item]);
@@ -109,14 +99,13 @@ export function useData() {
 
   const completeTopic = useCallback(async (topicId, goalId) => {
     await updateTopic(topicId, { is_completed: true, completed_at: new Date().toISOString() });
-    // Recalculate goal progress
     const goalTopics = topics.filter(t => t.goal_id === goalId);
     const done = goalTopics.filter(t => t.is_completed || t.id === topicId).length;
-    const pct = goalTopics.length > 0 ? done / goalTopics.length : 0;
     const goal = goals.find(g => g.id === goalId);
     if (goal) {
       const hoursFromTopics = goalTopics.reduce((s, t) => s + (t.estimated_mins || 30), 0) / 60;
-      await updateGoal(goalId, { completed_hours: Math.min(goal.completed_hours + (hoursFromTopics * pct / done || 0), goal.target_hours) });
+      const increment = goalTopics.length > 0 ? hoursFromTopics / goalTopics.length : 0;
+      await updateGoal(goalId, { completed_hours: Math.min(goal.completed_hours + increment, goal.target_hours) });
     }
   }, [topics, goals, updateTopic, updateGoal]);
 
@@ -125,8 +114,6 @@ export function useData() {
     setTopics(prev => [...prev.filter(t => t.goal_id !== goalId), ...items]);
     await Promise.all(items.map(t => store?.upsert('topics', t)));
   }, [store]);
-
-  // ── LINK GROUPS ─────────────────────────────────────────────────────────────
 
   const addLinkGroup = useCallback(async (tabId, name, isDefault = false) => {
     const item = { id: uuid(), tab_id: tabId, name, is_default: isDefault, is_shared: false, share_token: null, created_at: new Date().toISOString() };
@@ -146,8 +133,6 @@ export function useData() {
     setLinks(prev => prev.filter(l => l.id !== id));
     await store?.remove('links', id);
   }, [store]);
-
-  // ── DERIVED ─────────────────────────────────────────────────────────────────
 
   const topicsForGoal = useCallback((goalId) =>
     topics.filter(t => t.goal_id === goalId).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),

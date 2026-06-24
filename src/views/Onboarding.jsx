@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { GEMS, ALL_TABS } from '../theme/gems';
 import { Text, Input, Btn } from '../components/ui';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth.jsx';
 
 const g = GEMS.dashboard; // Onboarding always uses Sapphire
 
