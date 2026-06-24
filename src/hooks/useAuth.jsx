@@ -52,6 +52,9 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Track whether we are mid-onboarding so auth listener doesn't overwrite step
+  const onboardingInProgress = useRef(false);
+
   useEffect(() => {
     // Check existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -64,8 +67,13 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = onAuthChange((session) => {
       setSession(session);
       if (session) {
-        loadProfile(session.user);
+        // Only auto-load profile on mount or full sign-in
+        // Don't interrupt mid-onboarding flow (storage/tabs steps)
+        if (!onboardingInProgress.current) {
+          loadProfile(session.user);
+        }
       } else {
+        onboardingInProgress.current = false;
         setProfile(null);
         setLoading(false);
         setAuthStep('welcome');
@@ -116,7 +124,15 @@ export function AuthProvider({ children }) {
     profile,
     loading,
     authStep,
-    setAuthStep,
+    setAuthStep: (step) => {
+      // Mark onboarding in progress when moving to storage/tabs steps
+      if (step === 'storage' || step === 'tabs') {
+        onboardingInProgress.current = true;
+      } else if (step === 'done') {
+        onboardingInProgress.current = false;
+      }
+      setAuthStep(step);
+    },
     sendOTP,
     verifyOTP,
     signInWithGoogle,
