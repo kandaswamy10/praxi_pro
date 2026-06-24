@@ -1,5 +1,5 @@
 // src/views/Learning.jsx
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Text, SectionLabel, Surface, GemCard, ProgressBar, Tag, Btn, Input, Textarea, Select, Modal, LinkGroupWidget } from '../components/ui';
 import { callAI, parseJSON, prompts, DEFAULT_AI_CONFIG } from '../ai/service';
 
@@ -203,7 +203,7 @@ export default function Learning({ goals, topics, linkGroups, links, g, aiConfig
   const tabGroups = linkGroups.filter(lg => lg.tab_id === 'learning');
 
   // ── AI: classify + reorder all topics on add ──────────────────────────────
-  const handleAddTopic = useCallback(async (goalId, raw) => {
+  const handleAddTopic = async (goalId, raw) => {
     const newTopic = await onAddTopic(goalId, raw);
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
@@ -228,10 +228,10 @@ export default function Learning({ goals, topics, linkGroups, links, g, aiConfig
     } finally {
       setAiLoading(false);
     }
-  }, [goals, topics, onAddTopic, onReplaceTopics, aiConfig]);
+  };
 
   // ── AI: generate quiz ─────────────────────────────────────────────────────
-  const generateQuiz = useCallback(async (topic) => {
+  const generateQuiz = async (topic) => {
     setAiLoading(true); setAiError('');
     try {
       const raw = await callAI('quizGenerate', prompts.quizGenerate.user(topic), prompts.quizGenerate.system, aiConfig || DEFAULT_AI_CONFIG);
@@ -242,7 +242,7 @@ export default function Learning({ goals, topics, linkGroups, links, g, aiConfig
     } finally {
       setAiLoading(false);
     }
-  }, [aiConfig]);
+  };
 
   const goalProgress = (goal) => {
     const goalTopics = topics.filter(t => t.goal_id === goal.id);
