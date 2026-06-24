@@ -6,6 +6,19 @@ import { DEFAULT_AI_CONFIG } from '../ai/service';
 
 const AuthContext = createContext(null);
 
+// Build a safe default profile for any user
+const makeDefaultProfile = (user) => ({
+  id: user.id,
+  email: user.email,
+  name: user.user_metadata?.full_name || user.email.split('@')[0],
+  avatar_url: user.user_metadata?.avatar_url || null,
+  storage_mode: 'local',
+  enabled_tabs: ['dashboard', 'work', 'learning', 'personal', 'finance'],
+  pinned_tab: 'dashboard',
+  theme: 'auto',
+  ai_config: DEFAULT_AI_CONFIG,
+});
+
 export function AuthProvider({ children }) {
   const [session, setSession]   = useState(null);
   const [profile, setProfile]   = useState(null);
@@ -13,22 +26,16 @@ export function AuthProvider({ children }) {
   const [authStep, setAuthStep] = useState('welcome');
 
   useEffect(() => {
-    // Check existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
-        loadProfile(session.user);
-      } else {
-        setLoading(false);
-      }
+      if (session) loadProfile(session.user);
+      else setLoading(false);
     });
 
-    // Listen for auth changes (OTP verify, Google OAuth callback)
     const { data: { subscription } } = onAuthChange((session) => {
       setSession(session);
-      if (session) {
-        loadProfile(session.user);
-      } else {
+      if (session) loadProfile(session.user);
+      else {
         setProfile(null);
         setLoading(false);
         setAuthStep('welcome');
@@ -39,42 +46,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   const loadProfile = async (user) => {
+    setLoading(true);
     try {
-      const { data, error } = await cloud.getProfile(user.id);
-      if (data && !error) {
-        // Existing user — go straight to app
-        setProfile(data);
+      const { data } = await cloud.getProfile(user.id);
+      if (data?.id) {
+        // Returning user — merge with defaults to fill any missing fields
+        setProfile({ ...makeDefaultProfile(user), ...data });
         setAuthStep('done');
       } else {
-        // New user — build default profile, go to onboarding
-        const defaultProfile = {
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.full_name || user.email.split('@')[0],
-          avatar_url: user.user_metadata?.avatar_url || null,
-          storage_mode: 'local',
-          enabled_tabs: ['dashboard', 'work', 'learning', 'personal', 'finance'],
-          pinned_tab: 'dashboard',
-          theme: 'auto',
-          ai_config: DEFAULT_AI_CONFIG,
-        };
-        setProfile(defaultProfile);
+        // New user — set defaults, go through onboarding
+        setProfile(makeDefaultProfile(user));
         setAuthStep('storage');
       }
     } catch (e) {
-      console.error('loadProfile error:', e);
-      // Still let them through with a default profile
-      const defaultProfile = {
-        id: user.id,
-        email: user.email,
-        name: user.email.split('@')[0],
-        storage_mode: 'local',
-        enabled_tabs: ['dashboard', 'work', 'learning', 'personal', 'finance'],
-        pinned_tab: 'dashboard',
-        theme: 'auto',
-        ai_config: DEFAULT_AI_CONFIG,
-      };
-      setProfile(defaultProfile);
+      console.warn('loadProfile error (using defaults):', e.message);
+      setProfile(makeDefaultProfile(user));
       setAuthStep('storage');
     } finally {
       setLoading(false);
@@ -85,14 +71,12 @@ export function AuthProvider({ children }) {
     if (!session) return;
     const merged = { ...profile, ...updates };
     setProfile(merged);
-    // Save to Supabase (don't block on error)
+    setAuthStep('done'); // ← advance immediately, don't wait for DB
     try {
       await cloud.saveProfile(session.user.id, merged);
     } catch (e) {
-      console.warn('Profile save failed, continuing anyway:', e);
+      console.warn('Profile save error (non-blocking):', e.message);
     }
-    // Always advance to app regardless of save success
-    setAuthStep('done');
   }, [session, profile]);
 
   const updateProfile = useCallback(async (updates) => {
@@ -103,19 +87,21 @@ export function AuthProvider({ children }) {
       await cloud.saveProfile(session.user.id, merged);
       await local.saveProfile(session.user.id, merged);
     } catch (e) {
-      console.warn('updateProfile error:', e);
+      console.warn('updateProfile error:', e.message);
     }
   }, [session, profile]);
+
+  const handleSignOut = async () => {
+    try { await signOut(); } catch (e) { console.warn('signOut error:', e); }
+    setSession(null);
+    setProfile(null);
+    setAuthStep('welcome');
+  };
 
   const value = {
     session, profile, loading, authStep, setAuthStep,
     sendOTP, verifyOTP, signInWithGoogle,
-    signOut: async () => {
-      await signOut();
-      setSession(null);
-      setProfile(null);
-      setAuthStep('welcome');
-    },
+    signOut: handleSignOut,
     completeOnboarding,
     updateProfile,
   };
