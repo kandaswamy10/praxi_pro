@@ -1,12 +1,11 @@
 // src/hooks/useAuth.jsx
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase, sendOTP, verifyOTP, signInWithGoogle, signOut, onAuthChange } from '../lib/supabase';
 import { cloud, local } from '../lib/storage';
 import { DEFAULT_AI_CONFIG } from '../ai/service';
 
 const AuthContext = createContext(null);
 
-// Build a safe default profile for any user
 const makeDefaultProfile = (user) => ({
   id: user.id,
   email: user.email,
@@ -25,41 +24,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading]   = useState(true);
   const [authStep, setAuthStep] = useState('welcome');
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) loadProfile(session.user);
-      else setLoading(false);
-    });
-
-    const { data: { subscription } } = onAuthChange((session) => {
-      setSession(session);
-      if (session) loadProfile(session.user);
-      else {
-        setProfile(null);
-        setLoading(false);
-        setAuthStep('welcome');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  // Use refs so async callbacks always have latest values
+  // without needing them as useCallback/useEffect dependencies
+  const sessionRef = useRef(session);
+  const profileRef = useRef(profile);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
 
   const loadProfile = async (user) => {
     setLoading(true);
     try {
       const { data } = await cloud.getProfile(user.id);
       if (data?.id) {
-        // Returning user — merge with defaults to fill any missing fields
-        setProfile({ ...makeDefaultProfile(user), ...data });
+        const merged = { ...makeDefaultProfile(user), ...data };
+        setProfile(merged);
         setAuthStep('done');
       } else {
-        // New user — set defaults, go through onboarding
         setProfile(makeDefaultProfile(user));
         setAuthStep('storage');
       }
     } catch (e) {
-      console.warn('loadProfile error (using defaults):', e.message);
+      console.warn('loadProfile error:', e.message);
       setProfile(makeDefaultProfile(user));
       setAuthStep('storage');
     } finally {
@@ -67,29 +52,57 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const completeOnboarding = useCallback(async (updates) => {
-    if (!session) return;
-    const merged = { ...profile, ...updates };
+  useEffect(() => {
+    // Check existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadProfile(session.user);
+      else setLoading(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = onAuthChange((session) => {
+      setSession(session);
+      if (session) {
+        loadProfile(session.user);
+      } else {
+        setProfile(null);
+        setLoading(false);
+        setAuthStep('welcome');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []); // ← empty deps, no hooks called inside
+
+  // Plain functions (not useCallback) — avoids hook rule violations
+  const completeOnboarding = async (updates) => {
+    const currentSession = sessionRef.current;
+    const currentProfile = profileRef.current;
+    if (!currentSession) return;
+    const merged = { ...currentProfile, ...updates };
     setProfile(merged);
-    setAuthStep('done'); // ← advance immediately, don't wait for DB
+    setAuthStep('done'); // advance immediately
     try {
-      await cloud.saveProfile(session.user.id, merged);
+      await cloud.saveProfile(currentSession.user.id, merged);
     } catch (e) {
       console.warn('Profile save error (non-blocking):', e.message);
     }
-  }, [session, profile]);
+  };
 
-  const updateProfile = useCallback(async (updates) => {
-    if (!session) return;
-    const merged = { ...profile, ...updates };
+  const updateProfile = async (updates) => {
+    const currentSession = sessionRef.current;
+    const currentProfile = profileRef.current;
+    if (!currentSession) return;
+    const merged = { ...currentProfile, ...updates };
     setProfile(merged);
     try {
-      await cloud.saveProfile(session.user.id, merged);
-      await local.saveProfile(session.user.id, merged);
+      await cloud.saveProfile(currentSession.user.id, merged);
+      await local.saveProfile(currentSession.user.id, merged);
     } catch (e) {
       console.warn('updateProfile error:', e.message);
     }
-  }, [session, profile]);
+  };
 
   const handleSignOut = async () => {
     try { await signOut(); } catch (e) { console.warn('signOut error:', e); }
@@ -99,8 +112,14 @@ export function AuthProvider({ children }) {
   };
 
   const value = {
-    session, profile, loading, authStep, setAuthStep,
-    sendOTP, verifyOTP, signInWithGoogle,
+    session,
+    profile,
+    loading,
+    authStep,
+    setAuthStep,
+    sendOTP,
+    verifyOTP,
+    signInWithGoogle,
     signOut: handleSignOut,
     completeOnboarding,
     updateProfile,
