@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { AuthProvider, useAuth } from './hooks/useAuth.jsx';
 import { useData } from './hooks/useData.js';
 import { useAlarms } from './hooks/useAlarms.js';
@@ -79,7 +79,7 @@ function AppInner() {
   const showAd = ad && !dismissedAds.has(tab);
 
   // ── Voice input ────────────────────────────────────────────────────────────
-  const startVoice = useCallback(() => {
+  const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert('Voice input not supported. Try Chrome.'); return; }
     const rec = new SR();
@@ -88,7 +88,7 @@ function AppInner() {
     rec.onend = () => setVoiceActive(false);
     rec.start();
     setVoiceActive(true);
-  }, []);
+  };
 
   // ── Content ────────────────────────────────────────────────────────────────
   const renderContent = () => {
