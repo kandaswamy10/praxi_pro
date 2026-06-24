@@ -1,10 +1,11 @@
 // src/hooks/useAuth.jsx
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase, sendOTP, verifyOTP, signInWithGoogle, signOut, onAuthChange } from '../lib/supabase';
-import { cloud, local } from '../lib/storage';
 import { DEFAULT_AI_CONFIG } from '../ai/service';
 
 const AuthContext = createContext(null);
+
+const STORAGE_KEY = 'praxi_profile';
 
 const makeDefaultProfile = (user) => ({
   id: user.id,
@@ -16,7 +17,16 @@ const makeDefaultProfile = (user) => ({
   pinned_tab: 'dashboard',
   theme: 'auto',
   ai_config: DEFAULT_AI_CONFIG,
+  onboarded: false,
 });
+
+const saveProfileLocal = (profile) => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(profile)); } catch(e) {}
+};
+
+const loadProfileLocal = () => {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { return null; }
+};
 
 export function AuthProvider({ children }) {
   const [session, setSession]   = useState(null);
@@ -24,56 +34,29 @@ export function AuthProvider({ children }) {
   const [loading, setLoading]   = useState(true);
   const [authStep, setAuthStep] = useState('welcome');
 
-  // Use refs so async callbacks always have latest values
-  // without needing them as useCallback/useEffect dependencies
-  const sessionRef = useRef(session);
-  const profileRef = useRef(profile);
-  useEffect(() => { sessionRef.current = session; }, [session]);
-  useEffect(() => { profileRef.current = profile; }, [profile]);
-
-  const loadProfile = async (user) => {
-    setLoading(true);
-    try {
-      const { data } = await cloud.getProfile(user.id);
-      if (data?.id) {
-        const merged = { ...makeDefaultProfile(user), ...data };
-        setProfile(merged);
-        setAuthStep('done');
-      } else {
-        setProfile(makeDefaultProfile(user));
-        setAuthStep('storage');
-      }
-    } catch (e) {
-      console.warn('loadProfile error:', e.message);
-      setProfile(makeDefaultProfile(user));
-      setAuthStep('storage');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Track whether we are mid-onboarding so auth listener doesn't overwrite step
-  const onboardingInProgress = useRef(false);
+  const sessionRef = useRef(null);
+  const profileRef = useRef(null);
+  sessionRef.current = session;
+  profileRef.current = profile;
 
   useEffect(() => {
-    // Check existing session on mount
+    // On mount — check if there's already a session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) loadProfile(session.user);
-      else setLoading(false);
+      if (session) {
+        setSession(session);
+        handleExistingSession(session);
+      } else {
+        setLoading(false);
+      }
     });
 
-    // Listen for auth state changes
-    const { data: { subscription } } = onAuthChange((session) => {
-      setSession(session);
-      if (session) {
-        // Only auto-load profile on mount or full sign-in
-        // Don't interrupt mid-onboarding flow (storage/tabs steps)
-        if (!onboardingInProgress.current) {
-          loadProfile(session.user);
-        }
-      } else {
-        onboardingInProgress.current = false;
+    // Auth state changes — only handle SIGNED_IN and SIGNED_OUT
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setSession(session);
+        handleExistingSession(session);
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
         setProfile(null);
         setLoading(false);
         setAuthStep('welcome');
@@ -81,68 +64,62 @@ export function AuthProvider({ children }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []); // ← empty deps, no hooks called inside
+  }, []);
 
-  // Plain functions (not useCallback) — avoids hook rule violations
-  const completeOnboarding = async (updates) => {
-    const currentSession = sessionRef.current;
-    const currentProfile = profileRef.current;
-    if (!currentSession) return;
-    const merged = { ...currentProfile, ...updates };
+  const handleExistingSession = (session) => {
+    // Check localStorage for saved profile
+    const saved = loadProfileLocal();
+    if (saved && saved.id === session.user.id && saved.onboarded) {
+      // Returning user who completed onboarding
+      setProfile(saved);
+      setAuthStep('done');
+    } else {
+      // New user or incomplete onboarding — build default profile
+      const defaultProfile = makeDefaultProfile(session.user);
+      setProfile(defaultProfile);
+      setAuthStep('storage'); // always show onboarding for new sessions
+    }
+    setLoading(false);
+  };
+
+  const completeOnboarding = (updates) => {
+    const merged = { ...profileRef.current, ...updates, onboarded: true };
     setProfile(merged);
-    setAuthStep('done'); // advance immediately
-    try {
-      await cloud.saveProfile(currentSession.user.id, merged);
-    } catch (e) {
-      console.warn('Profile save error (non-blocking):', e.message);
+    saveProfileLocal(merged);
+    setAuthStep('done');
+    // Also try to save to Supabase in background (non-blocking)
+    if (sessionRef.current) {
+      supabase.from('profiles').upsert({ id: sessionRef.current.user.id, ...merged })
+        .then(() => {}).catch(e => console.warn('Supabase profile save:', e.message));
     }
   };
 
-  const updateProfile = async (updates) => {
-    const currentSession = sessionRef.current;
-    const currentProfile = profileRef.current;
-    if (!currentSession) return;
-    const merged = { ...currentProfile, ...updates };
+  const updateProfile = (updates) => {
+    const merged = { ...profileRef.current, ...updates };
     setProfile(merged);
-    try {
-      await cloud.saveProfile(currentSession.user.id, merged);
-      await local.saveProfile(currentSession.user.id, merged);
-    } catch (e) {
-      console.warn('updateProfile error:', e.message);
+    saveProfileLocal(merged);
+    if (sessionRef.current) {
+      supabase.from('profiles').upsert({ id: sessionRef.current.user.id, ...merged })
+        .then(() => {}).catch(e => console.warn('Supabase profile update:', e.message));
     }
   };
 
   const handleSignOut = async () => {
-    try { await signOut(); } catch (e) { console.warn('signOut error:', e); }
+    try { await signOut(); } catch(e) {}
+    localStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setProfile(null);
     setAuthStep('welcome');
   };
 
-  const value = {
-    session,
-    profile,
-    loading,
-    authStep,
-    setAuthStep: (step) => {
-      // Mark onboarding in progress when moving to storage/tabs steps
-      if (step === 'storage' || step === 'tabs') {
-        onboardingInProgress.current = true;
-      } else if (step === 'done') {
-        onboardingInProgress.current = false;
-      }
-      setAuthStep(step);
-    },
-    sendOTP,
-    verifyOTP,
-    signInWithGoogle,
-    signOut: handleSignOut,
-    completeOnboarding,
-    updateProfile,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      session, profile, loading, authStep, setAuthStep,
+      sendOTP, verifyOTP, signInWithGoogle,
+      signOut: handleSignOut,
+      completeOnboarding,
+      updateProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   );
