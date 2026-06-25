@@ -883,58 +883,66 @@ function NotesSection({ notes, events, g, onView, onDelete, onAdd }) {
           onChange={e => setSearch(e.target.value)} style={{ padding: '8px 12px' }} />
       )}
 
-      {sorted.length === 0 && (
-        <Surface g={g} style={{ textAlign: 'center', padding: 24 }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>📝</div>
-          <Text muted g={g} size={13}>No notes yet. Tap ＋ or the 📝 icon on an event.</Text>
-        </Surface>
-      )}
+      {/* Fixed-height scroll container — 4 cards visible (~76px each) */}
+      <div style={{
+        height: sorted.length === 0 ? 'auto' : 310,
+        overflowY: sorted.length === 0 ? 'visible' : 'auto',
+        overflowX: 'hidden',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        paddingRight: sorted.length > 4 ? 2 : 0,
+      }}>
+        {sorted.length === 0 && (
+          <Surface g={g} style={{ textAlign: 'center', padding: 24 }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>📝</div>
+            <Text muted g={g} size={13}>No notes yet. Tap ＋ or the 📝 icon on an event.</Text>
+          </Surface>
+        )}
 
-      {sorted.map(note => {
-        const linked = note.event_id ? getLinkedEvent(note.event_id) : null;
-        return (
-          <div key={note.id} style={{
-            display: 'flex', alignItems: 'stretch',
-            background: 'rgba(255,255,255,0.85)',
-            border: `1px solid ${g.surfaceBorder}`,
-            borderRadius: 12, overflow: 'hidden',
-          }}>
-            {/* Tap area — left side, opens view */}
-            <button onClick={() => onView(note)} style={{
-              flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-              padding: '12px 14px', textAlign: 'left', minWidth: 0,
+        {sorted.map(note => {
+          const linked = note.event_id ? getLinkedEvent(note.event_id) : null;
+          return (
+            <div key={note.id} style={{
+              display: 'flex', alignItems: 'stretch', flexShrink: 0,
+              background: 'rgba(255,255,255,0.85)',
+              border: `1px solid ${g.surfaceBorder}`,
+              borderRadius: 12, overflow: 'hidden',
             }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: g.text,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {note.title || 'Untitled'}
-              </div>
-              {linked && (
-                <div style={{ marginTop: 3 }}>
-                  <Tag label={`📅 ${linked.title}`} g={g} />
+              {/* Tap area — left side, opens view */}
+              <button onClick={() => onView(note)} style={{
+                flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                padding: '10px 14px', textAlign: 'left', minWidth: 0,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: g.text,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {note.title || 'Untitled'}
                 </div>
-              )}
-              {note.content && (
-                <div style={{
-                  marginTop: 5, fontSize: 12, color: g.muted, lineHeight: 1.5,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}>{note.content}</div>
-              )}
-              <div style={{ marginTop: 5, fontSize: 10, color: g.muted }}>
-                {formatDateTime(note.updated_at || note.created_at)}
-              </div>
-            </button>
+                {linked && (
+                  <div style={{ marginTop: 2 }}>
+                    <Tag label={`📅 ${linked.title}`} g={g} />
+                  </div>
+                )}
+                <div style={{ marginTop: 3, fontSize: 10, color: g.muted }}>
+                  {formatDateTime(note.updated_at || note.created_at)}
+                </div>
+              </button>
 
-            {/* Delete — right side only */}
-            <button onClick={() => { if (confirm('Delete this note?')) onDelete(note.id); }} style={{
-              flexShrink: 0, width: 44, background: 'rgba(220,53,69,0.07)',
-              border: 'none', borderLeft: `1px solid ${g.surfaceBorder}`,
-              cursor: 'pointer', color: '#dc3545', fontSize: 16,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>🗑</button>
-          </div>
-        );
-      })}
+              {/* Delete — right side only */}
+              <button onClick={() => { if (confirm('Delete this note?')) onDelete(note.id); }} style={{
+                flexShrink: 0, width: 44, background: 'rgba(220,53,69,0.07)',
+                border: 'none', borderLeft: `1px solid ${g.surfaceBorder}`,
+                cursor: 'pointer', color: '#dc3545', fontSize: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>🗑</button>
+            </div>
+          );
+        })}
+      </div>
+
+      {sorted.length > 4 && (
+        <Text size={11} muted g={g} style={{ textAlign: 'center' }}>
+          ↕ Scroll to see all {sorted.length} notes
+        </Text>
+      )}
     </div>
   );
 }
