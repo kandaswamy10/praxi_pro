@@ -80,10 +80,24 @@ export function useData() {
 
   // ── GOALS ───────────────────────────────────────────────────────────────────
   const addGoal = async (payload) => {
-    const item = { ...payload, id: uuid(), completed_hours: 0, is_shared: false, share_token: null, created_at: new Date().toISOString() };
+    const item = { ...payload, id: uuid(), completed_hours: 0, is_completed: false, is_shared: false, share_token: null, created_at: new Date().toISOString() };
     setGoals(prev => [item, ...prev]);
     await storeRef.current?.upsert('learning_goals', item);
+
+    // Auto-create a link group for this goal with one sample link
+    const lg = { id: uuid(), tab_id: 'learning', goal_id: item.id, name: `${item.title} Resources`, is_default: false, is_shared: false, share_token: null, created_at: new Date().toISOString() };
+    setLinkGroups(prev => [...prev, lg]);
+    await storeRef.current?.upsert('link_groups', lg);
+
+    const sampleLink = { id: uuid(), group_id: lg.id, title: `Search: ${item.title}`, url: `https://www.google.com/search?q=${encodeURIComponent(item.title + ' tutorial')}`, created_at: new Date().toISOString() };
+    setLinks(prev => [...prev, sampleLink]);
+    await storeRef.current?.upsert('links', sampleLink);
+
     return item;
+  };
+
+  const completeGoal = async (id, val = true) => {
+    await updateGoal(id, { is_completed: val, completed_at: val ? new Date().toISOString() : null });
   };
 
   const updateGoal = async (id, updates) => {
@@ -178,7 +192,7 @@ export function useData() {
   return {
     ready, events, goals, topics, linkGroups, links, meetingNotes,
     addEvent, updateEvent, deleteEvent,
-    addGoal, updateGoal, logHours, deleteGoal,
+    addGoal, updateGoal, completeGoal, logHours, deleteGoal,
     addTopic, updateTopic, completeTopic, replaceTopics,
     addLinkGroup, addLink, deleteLink,
     addMeetingNote, updateMeetingNote, deleteMeetingNote,

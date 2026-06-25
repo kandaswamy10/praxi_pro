@@ -107,6 +107,7 @@ function AppInner() {
           linkGroups={data.linkGroups} links={data.links}
           g={g} aiConfig={profile?.ai_config}
           onAddGoal={data.addGoal} onUpdateGoal={data.updateGoal}
+          onCompleteGoal={data.completeGoal}
           onLogHours={data.logHours} onDeleteGoal={data.deleteGoal}
           onAddTopic={data.addTopic} onCompleteTopic={data.completeTopic}
           onReplaceTopics={data.replaceTopics}
