@@ -46,12 +46,17 @@ function buildRequest(provider, model, systemPrompt, userPrompt, config) {
     case 'openrouter':
       return {
         url: ENDPOINTS.openrouter,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_KEY || config.apiKey || ''}`,
-          'HTTP-Referer': import.meta.env.VITE_APP_URL || 'https://praxi-pro.app',
-          'X-Title': 'Praxi Pro',
-        },
+        headers: (() => {
+          const key = import.meta.env.VITE_OPENROUTER_KEY || config.apiKey || '';
+          const isReal = key && !key.startsWith('sk-or-your') && key !== 'undefined';
+          const h = {
+            'Content-Type': 'application/json',
+            'HTTP-Referer': import.meta.env.VITE_APP_URL || 'https://praxi-pro.app',
+            'X-Title': 'Praxi Pro',
+          };
+          if (isReal) h['Authorization'] = `Bearer ${key}`;
+          return h;
+        })(),
         body: { model, messages, temperature, max_tokens: maxTokens },
       };
 
@@ -229,3 +234,5 @@ Respond with ONLY the single word.`,
     user: (url) => url,
   },
 };
+
+export const PROMPTS = prompts;

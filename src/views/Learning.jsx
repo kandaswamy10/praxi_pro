@@ -214,93 +214,20 @@ function AddGoalModal({ g, onAdd, onClose }) {
 
 function AddTopicModal({ goalId, g, onAdd, onClose }) {
   const [title, setTitle] = useState('');
+  const [url,   setUrl]   = useState('');
   return (
     <Modal title="Add Topic" g={g} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Input g={g} placeholder="Topic title *" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+        <Input g={g} placeholder="Resource URL (optional)" value={url} onChange={e => setUrl(e.target.value)} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn g={g} size="lg" onClick={() => { if (title.trim()) { onAdd(goalId, { title }); onClose(); } }} style={{ flex: 1 }}>Add</Btn>
+          <Btn g={g} size="lg" onClick={() => {
+            if (title.trim()) { onAdd(goalId, { title, url: url.trim() || null }); onClose(); }
+          }} style={{ flex: 1 }}>Add</Btn>
           <Btn g={g} variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
         </div>
       </div>
     </Modal>
-  );
-}
-
-// ── ADD LINK MODAL ────────────────────────────────────────────────────────────
-
-function AddLinkModal({ groupId, g, onAdd, onClose }) {
-  const [title, setTitle] = useState('');
-  const [url, setUrl]     = useState('https://');
-  return (
-    <Modal title="Add Link" g={g} onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Input g={g} placeholder="Title *" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
-        <Input g={g} placeholder="https://…" value={url} onChange={e => setUrl(e.target.value)} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn g={g} size="lg" onClick={() => { if (title.trim() && url.trim()) { onAdd(groupId, title, url); onClose(); } }} style={{ flex: 1 }}>Add</Btn>
-          <Btn g={g} variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-// ── GOAL LINK GROUP (inline per goal) ────────────────────────────────────────
-
-function GoalLinks({ goal, linkGroups, links, g, onAddLink, onDeleteLink }) {
-  const [showAddLink, setShowAddLink] = useState(false);
-  const [viewer, setViewer]           = useState(null);
-
-  const group = linkGroups.find(lg => lg.goal_id === goal.id);
-  if (!group) return null;
-  const groupLinks = links.filter(l => l.group_id === group.id);
-
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <SectionLabel g={g}>📎 Resources</SectionLabel>
-        <Btn g={g} size="sm" onClick={() => setShowAddLink(true)}>＋ Link</Btn>
-      </div>
-
-      {groupLinks.length === 0 && (
-        <Text size={11} muted g={g}>No links yet.</Text>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {groupLinks.map(link => (
-          <div key={link.id} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.8)', border: `1px solid ${g.surfaceBorder}`,
-            borderRadius: 10, padding: '8px 12px',
-          }}>
-            {/* Tap to open in iframe */}
-            <button onClick={() => setViewer(link)} style={{
-              flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-              textAlign: 'left', padding: 0, minWidth: 0,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: g.text,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                🔗 {link.title}
-              </div>
-              <div style={{ fontSize: 10, color: g.muted,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {link.url}
-              </div>
-            </button>
-            <button onClick={() => { if (confirm('Remove this link?')) onDeleteLink(link.id); }}
-              style={{ background: 'none', border: 'none', color: g.muted, cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>
-              🗑
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {showAddLink && (
-        <AddLinkModal g={g} groupId={group.id} onAdd={onAddLink} onClose={() => setShowAddLink(false)} />
-      )}
-      {viewer && <LinkViewer link={viewer} g={g} onClose={() => setViewer(null)} />}
-    </div>
   );
 }
 
@@ -457,20 +384,24 @@ function ActiveGoalCard({
                         {topic.estimated_mins && <Text size={11} muted g={g}>· ~{topic.estimated_mins}m</Text>}
                       </div>
                     </div>
-                    {!topic.is_completed && !locked && (
-                      <Btn size="sm" g={g} onClick={() => generateQuiz(topic)}
-                        style={{ opacity: aiLoading ? 0.4 : 1 }}>Quiz</Btn>
-                    )}
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+                      {!topic.is_completed && !locked && (
+                        <Btn size="sm" g={g} onClick={() => generateQuiz(topic)}
+                          style={{ opacity: aiLoading ? 0.4 : 1 }}>Quiz</Btn>
+                      )}
+                      {topic.url && (
+                        <a href={topic.url} target="_blank" rel="noreferrer" style={{
+                          fontSize: 12, color: g.accent, textDecoration: 'none',
+                          background: `${g.card}14`, border: `1px solid ${g.surfaceBorder}`,
+                          borderRadius: 6, padding: '3px 8px',
+                        }}>↗</a>
+                      )}
+                    </div>
                   </div>
                 );
               })
           }
 
-          {/* Goal resource links */}
-          <GoalLinks
-            goal={goal} linkGroups={linkGroups} links={links} g={g}
-            onAddLink={onAddLink} onDeleteLink={onDeleteLink}
-          />
         </div>
       )}
 
@@ -622,8 +553,6 @@ export default function Learning({
           key={goal.id}
           goal={goal}
           topics={topics}
-          linkGroups={linkGroups}
-          links={links}
           g={g}
           aiConfig={aiConfig}
           isActive={activeGoalId === goal.id}
@@ -634,8 +563,6 @@ export default function Learning({
           onAddTopic={onAddTopic}
           onCompleteTopic={onCompleteTopic}
           onReplaceTopics={onReplaceTopics}
-          onAddLink={onAddLink}
-          onDeleteLink={onDeleteLink}
         />
       ))}
 
