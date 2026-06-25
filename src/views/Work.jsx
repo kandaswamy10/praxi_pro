@@ -692,67 +692,98 @@ function TextVoiceArea({ g, value, onChange, aiConfig }) {
 
 // ── NOTE MODAL ────────────────────────────────────────────────────────────────
 
-function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
+function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfig, startEditing = false }) {
+  const isNew    = !initial.id;
+  const [editing, setEditing] = useState(isNew || startEditing);
   const [title,   setTitle]   = useState(initial.title    || '');
   const [content, setContent] = useState(initial.content  || '');
   const [eventId, setEventId] = useState(initial.event_id || '');
-  const [mode,    setMode]    = useState('text'); // 'text' | 'draw'
+  const [mode,    setMode]    = useState('text');
   const canvasRef = useRef(null);
 
   const workEvents = events.filter(e => !e.is_completed);
+  const linkedEvent = workEvents.find(e => e.id === (eventId || initial.event_id));
 
   const handleSave = () => {
     if (!title.trim()) return;
     const drawDataUrl = canvasRef.current?.toDataURL?.() || null;
     onSave({ ...initial, title, content, draw_data: drawDataUrl, event_id: eventId || null, tab: 'work' });
+    setEditing(false);
+  };
+
+  const handleDelete = () => {
+    if (confirm('Delete this note?')) { onDelete(initial.id); onClose(); }
   };
 
   return (
-    // Full-screen modal override
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.45)',
       display: 'flex', alignItems: 'stretch', justifyContent: 'center',
-      padding: 0,
-    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    }}>
       <div style={{
         display: 'flex', flexDirection: 'column',
         width: '100%', maxWidth: 680,
         background: g.pageBg || '#f0f4ff',
-        borderRadius: 0,
         overflow: 'hidden',
-        margin: 0,
       }}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 16px',
-          background: g.card,
-          flexShrink: 0,
+          padding: '12px 16px', background: g.card, flexShrink: 0,
         }}>
           <button onClick={onClose} style={{
             background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
             padding: '4px 10px', color: '#fff', fontSize: 18, cursor: 'pointer',
           }}>←</button>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Note title…"
-            autoFocus
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              color: '#fff', fontSize: 16, fontWeight: 700,
-              fontFamily: 'inherit',
-            }}
-          />
-          <button onClick={handleSave} style={{
-            background: 'rgba(255,255,255,0.25)', border: 'none', borderRadius: 8,
-            padding: '6px 14px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-          }}>Save</button>
+
+          {editing ? (
+            <input value={title} onChange={e => setTitle(e.target.value)}
+              placeholder="Note title…" autoFocus
+              style={{
+                flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit',
+              }} />
+          ) : (
+            <span style={{
+              flex: 1, color: '#fff', fontSize: 16, fontWeight: 700,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{title || 'Untitled'}</span>
+          )}
+
+          {/* View mode actions */}
+          {!editing && !isNew && (
+            <>
+              <button onClick={() => setEditing(true)} style={{
+                background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+                padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>Edit</button>
+              <button onClick={handleDelete} style={{
+                background: 'rgba(255,0,0,0.25)', border: 'none', borderRadius: 8,
+                padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>Delete</button>
+            </>
+          )}
+
+          {/* Edit mode actions */}
+          {editing && (
+            <>
+              {!isNew && (
+                <button onClick={() => { setTitle(initial.title || ''); setContent(initial.content || ''); setEditing(false); }} style={{
+                  background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
+                  padding: '6px 12px', color: '#fff', fontSize: 12, cursor: 'pointer',
+                }}>Cancel</button>
+              )}
+              <button onClick={handleSave} style={{
+                background: 'rgba(255,255,255,0.25)', border: 'none', borderRadius: 8,
+                padding: '6px 14px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>Save</button>
+            </>
+          )}
         </div>
 
-        {/* Link to event + mode switcher */}
+        {/* ── Subheader: linked event + mode tabs (edit only) ── */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 16px',
@@ -760,26 +791,29 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
           borderBottom: `1px solid ${g.surfaceBorder}`,
           flexShrink: 0, flexWrap: 'wrap',
         }}>
-          <select value={eventId} onChange={e => setEventId(e.target.value)} style={{
-            flex: 1, minWidth: 0, fontSize: 12, padding: '4px 8px',
-            border: `1px solid ${g.surfaceBorder}`, borderRadius: 8,
-            background: 'white', color: g.text, fontFamily: 'inherit',
-          }}>
-            <option value="">— Standalone note —</option>
-            {workEvents.map(ev => (
-              <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
-            ))}
-          </select>
+          {editing ? (
+            <select value={eventId} onChange={e => setEventId(e.target.value)} style={{
+              flex: 1, minWidth: 0, fontSize: 12, padding: '4px 8px',
+              border: `1px solid ${g.surfaceBorder}`, borderRadius: 8,
+              background: 'white', color: g.text, fontFamily: 'inherit',
+            }}>
+              <option value="">— Standalone note —</option>
+              {workEvents.map(ev => (
+                <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ flex: 1, fontSize: 12, color: g.muted }}>
+              {linkedEvent ? `📅 ${linkedEvent.title} · ${formatDate(linkedEvent.date)}` : 'Standalone note'}
+            </span>
+          )}
 
-          {/* Mode tabs */}
+          {/* Mode switcher — always visible */}
           <div style={{
-            display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden',
+            display: 'flex', borderRadius: 8, overflow: 'hidden',
             border: `1px solid ${g.surfaceBorder}`, flexShrink: 0,
           }}>
-            {[
-              { id: 'text', label: '📝 Text & Voice' },
-              { id: 'draw', label: '✏️ Draw' },
-            ].map(m => (
+            {[{ id: 'text', label: '📝 Text' }, { id: 'draw', label: '✏️ Draw' }].map(m => (
               <button key={m.id} onClick={() => setMode(m.id)} style={{
                 padding: '5px 14px', border: 'none', cursor: 'pointer',
                 background: mode === m.id ? g.card : 'white',
@@ -790,13 +824,28 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
           </div>
         </div>
 
-        {/* Content area — fills remaining height */}
+        {/* ── Content ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           {mode === 'text' && (
-            <TextVoiceArea g={g} value={content} onChange={setContent} aiConfig={aiConfig} />
+            editing
+              ? <TextVoiceArea g={g} value={content} onChange={setContent} aiConfig={aiConfig} />
+              : <div style={{
+                  flex: 1, overflowY: 'auto', padding: '16px',
+                  background: 'rgba(255,255,255,0.96)',
+                  backgroundImage: `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}55 28px)`,
+                  backgroundSize: '100% 28px', backgroundPositionY: '4px',
+                }}>
+                  {content
+                    ? <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 13,
+                        lineHeight: '28px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: g.text }}>
+                        {content}
+                      </pre>
+                    : <span style={{ color: g.muted, fontSize: 13 }}>No text notes yet. Tap Edit to add.</span>
+                  }
+                </div>
           )}
           {mode === 'draw' && (
-            <DrawCanvas g={g} canvasRef={canvasRef} />
+            <DrawCanvas g={g} canvasRef={canvasRef} readonly={!editing} />
           )}
         </div>
 
@@ -809,7 +858,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
 
 // ── NOTES SECTION ─────────────────────────────────────────────────────────────
 
-function NotesSection({ notes, events, g, onEdit, onDelete, onAdd }) {
+function NotesSection({ notes, events, g, onView, onDelete, onAdd }) {
   const [search, setSearch] = useState('');
 
   const sorted = [...notes]
@@ -817,16 +866,16 @@ function NotesSection({ notes, events, g, onEdit, onDelete, onAdd }) {
     .filter(n => !search || n.title.toLowerCase().includes(search.toLowerCase())
       || n.content.toLowerCase().includes(search.toLowerCase()));
 
-  const getLinkedEvent = (eventId) => events.find(e => e.id === eventId);
+  const getLinkedEvent = (eid) => events.find(e => e.id === eid);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <Text size={16} bold g={g}>Meeting Notes</Text>
-          <Text size={11} muted g={g} style={{ marginLeft: 6 }}>({notes.length})</Text>
+          <Text size={11} muted g={g}>({notes.length})</Text>
         </div>
-        <Btn g={g} size="sm" onClick={() => onAdd({ title: '', content: '', tab: 'work' })}>＋ Note</Btn>
+        <Btn g={g} size="sm" onClick={() => onAdd()}>＋ Note</Btn>
       </div>
 
       {notes.length > 3 && (
@@ -844,34 +893,46 @@ function NotesSection({ notes, events, g, onEdit, onDelete, onAdd }) {
       {sorted.map(note => {
         const linked = note.event_id ? getLinkedEvent(note.event_id) : null;
         return (
-          <Surface key={note.id} g={g} style={{ padding: '12px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text size={13} bold g={g} style={{ display: 'block' }}>{note.title}</Text>
-                {linked && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
-                    <Tag label={`📅 ${linked.title}`} g={g} />
-                  </div>
-                )}
-                {note.content && (
-                  <Text size={12} muted g={g} style={{
-                    marginTop: 6, display: 'block',
-                    overflow: 'hidden', display: '-webkit-box',
-                    WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                  }}>{note.content}</Text>
-                )}
-                <Text size={10} muted g={g} style={{ marginTop: 4, display: 'block' }}>
-                  {formatDateTime(note.updated_at || note.created_at)}
-                </Text>
+          <div key={note.id} style={{
+            display: 'flex', alignItems: 'stretch',
+            background: 'rgba(255,255,255,0.85)',
+            border: `1px solid ${g.surfaceBorder}`,
+            borderRadius: 12, overflow: 'hidden',
+          }}>
+            {/* Tap area — left side, opens view */}
+            <button onClick={() => onView(note)} style={{
+              flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+              padding: '12px 14px', textAlign: 'left', minWidth: 0,
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: g.text,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {note.title || 'Untitled'}
               </div>
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                <button onClick={() => onEdit(note)}
-                  style={{ background: 'none', border: 'none', color: g.muted, cursor: 'pointer', fontSize: 14 }}>✏️</button>
-                <button onClick={() => { if (confirm('Delete this note?')) onDelete(note.id); }}
-                  style={{ background: 'none', border: 'none', color: g.muted, cursor: 'pointer', fontSize: 14 }}>🗑</button>
+              {linked && (
+                <div style={{ marginTop: 3 }}>
+                  <Tag label={`📅 ${linked.title}`} g={g} />
+                </div>
+              )}
+              {note.content && (
+                <div style={{
+                  marginTop: 5, fontSize: 12, color: g.muted, lineHeight: 1.5,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}>{note.content}</div>
+              )}
+              <div style={{ marginTop: 5, fontSize: 10, color: g.muted }}>
+                {formatDateTime(note.updated_at || note.created_at)}
               </div>
-            </div>
-          </Surface>
+            </button>
+
+            {/* Delete — right side only */}
+            <button onClick={() => { if (confirm('Delete this note?')) onDelete(note.id); }} style={{
+              flexShrink: 0, width: 44, background: 'rgba(220,53,69,0.07)',
+              border: 'none', borderLeft: `1px solid ${g.surfaceBorder}`,
+              cursor: 'pointer', color: '#dc3545', fontSize: 16,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>🗑</button>
+          </div>
         );
       })}
     </div>
@@ -995,9 +1056,9 @@ export default function Work({
           notes={meetingNotes || []}
           events={events}
           g={g}
-          onEdit={setNoteModal}
+          onView={setNoteModal}
           onDelete={onDeleteNote}
-          onAdd={setNoteModal}
+          onAdd={() => setNoteModal({ title: '', content: '', tab: 'work' })}
         />
       </div>
 
@@ -1006,7 +1067,9 @@ export default function Work({
       {editEvent && <AddEventModal g={g} initial={editEvent} onSave={handleSaveEvent} onClose={() => setEditEvent(null)} />}
       {noteModal !== null && (
         <NoteModal g={g} initial={noteModal} events={events}
-          onSave={handleSaveNote} onClose={() => setNoteModal(null)} aiConfig={aiConfig} />
+          onSave={handleSaveNote} onClose={() => setNoteModal(null)}
+          onDelete={onDeleteNote} aiConfig={aiConfig}
+          startEditing={!noteModal.id} />
       )}
       {calDay && (
         <DayEventsModal dateStr={calDay.dateStr} dayEvents={calDay.dayEvents} g={g}
