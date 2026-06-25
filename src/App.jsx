@@ -49,6 +49,7 @@ function AppInner() {
   const [dismissedAds, setDismissedAds] = useState(new Set());
   const [showAvatar, setShowAvatar]     = useState(false);
   const [voiceActive, setVoiceActive]   = useState(false);
+  const [showAddEvent, setShowAddEvent] = useState(false);
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) return (
@@ -119,6 +120,7 @@ function AppInner() {
           onAddEvent={data.addEvent} onUpdateEvent={data.updateEvent} onDeleteEvent={data.deleteEvent}
           onAddNote={data.addMeetingNote} onUpdateNote={data.updateMeetingNote} onDeleteNote={data.deleteMeetingNote}
           aiConfig={profile?.ai_config}
+          triggerAddEvent={showAddEvent} onAddEventDone={() => setShowAddEvent(false)}
         />
       );
       default: return <PlaceholderView tabId={tab} g={g} />;
@@ -225,23 +227,15 @@ function AppInner() {
         background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)',
         borderTop: `1px solid ${g.surfaceBorder}`,
         padding: '10px 18px', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: g.muted, background: `${g.card}12`,
-          borderRadius: 999, padding: '3px 10px', border: `1px solid ${g.surfaceBorder}`,
-          fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {enabledTabs.find(t => t.id === tab)?.label}
-        </span>
         <button onClick={startVoice} style={{
-          background: voiceActive ? g.card : 'rgba(255,255,255,0.8)',
+          background: voiceActive ? g.card : 'rgba(255,255,255,0.9)',
           border: `1px solid ${voiceActive ? g.card : g.surfaceBorder}`,
-          borderRadius: '50%', width: 38, height: 38, cursor: 'pointer', fontSize: 16 }}>🎤</button>
-        <button style={{ background: 'rgba(255,255,255,0.8)',
-          border: `1px solid ${g.surfaceBorder}`, borderRadius: '50%',
-          width: 38, height: 38, cursor: 'pointer', fontSize: 16 }}>🔗</button>
-        <button style={{ background: g.card, border: 'none', borderRadius: 999,
-          flex: 1, height: 38, cursor: 'pointer', color: '#fff', fontSize: 22, fontWeight: 700 }}>＋</button>
-        <button style={{ background: 'rgba(255,255,255,0.8)',
-          border: `1px solid ${g.surfaceBorder}`, borderRadius: '50%',
-          width: 38, height: 38, cursor: 'pointer', fontSize: 16 }}>🤖</button>
+          borderRadius: '50%', width: 42, height: 42, cursor: 'pointer', fontSize: 18,
+          flexShrink: 0 }}>🎤</button>
+        <button onClick={() => setShowAddEvent(true)} style={{
+          background: g.card, border: 'none', borderRadius: 999,
+          flex: 1, height: 42, cursor: 'pointer', color: '#fff',
+          fontSize: 15, fontWeight: 700 }}>＋ Add Event</button>
       </div>
     </div>
   );

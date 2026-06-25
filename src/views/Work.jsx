@@ -959,13 +959,19 @@ export default function Work({
   events, meetingNotes, g, aiConfig,
   onAddEvent, onUpdateEvent, onDeleteEvent,
   onAddNote, onUpdateNote, onDeleteNote,
+  triggerAddEvent, onAddEventDone,
 }) {
   const [view, setView]           = useState('timeline');
   const [showAdd, setShowAdd]     = useState(false);
   const [editEvent, setEditEvent] = useState(null);
-  const [noteModal, setNoteModal] = useState(null); // null | {} initial payload
+  const [noteModal, setNoteModal] = useState(null);
   const [calDay, setCalDay]       = useState(null);
   const [filter, setFilter]       = useState('all');
+
+  // Bottom bar + triggers add event modal
+  useEffect(() => {
+    if (triggerAddEvent) { setShowAdd(true); onAddEventDone?.(); }
+  }, [triggerAddEvent]);
 
   const td = todayStr();
 
