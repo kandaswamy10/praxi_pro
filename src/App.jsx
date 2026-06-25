@@ -43,7 +43,7 @@ function PlaceholderView({ tabId, g }) {
 function AppInner() {
   const { session, profile, loading, authStep, signOut, updateProfile } = useAuth();
   const data = useData();
-  const { alarmQueue, dismiss, snooze } = useAlarms(data.events);
+  const { alarmQueue, dismiss, snooze } = useAlarms(data.events, data.addMeetingNote);
 
   const [activeTab, setActiveTab]       = useState(null);
   const [dismissedAds, setDismissedAds] = useState(new Set());
@@ -115,11 +115,10 @@ function AppInner() {
       );
       case 'work': return (
         <Work
-          events={data.events} linkGroups={data.linkGroups} links={data.links}
-          g={g}
+          events={data.events} meetingNotes={data.meetingNotes} g={g}
           onAddEvent={data.addEvent} onUpdateEvent={data.updateEvent} onDeleteEvent={data.deleteEvent}
-          onAddLinkGroup={(name) => data.addLinkGroup('work', name)}
-          onAddLink={data.addLink} onDeleteLink={data.deleteLink}
+          onAddNote={data.addMeetingNote} onUpdateNote={data.updateMeetingNote} onDeleteNote={data.deleteMeetingNote}
+          aiConfig={profile?.ai_config}
         />
       );
       default: return <PlaceholderView tabId={tab} g={g} />;

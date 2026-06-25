@@ -12,19 +12,22 @@ export function useData() {
   const [events, setEvents]         = useState([]);
   const [goals, setGoals]           = useState([]);
   const [topics, setTopics]         = useState([]);
-  const [linkGroups, setLinkGroups] = useState([]);
-  const [links, setLinks]           = useState([]);
-  const [ready, setReady]           = useState(false);
+  const [linkGroups, setLinkGroups]     = useState([]);
+  const [links, setLinks]               = useState([]);
+  const [meetingNotes, setMeetingNotes] = useState([]);
+  const [ready, setReady]               = useState(false);
 
   // Refs so plain async functions always see latest state
-  const eventsRef     = useRef(events);
-  const goalsRef      = useRef(goals);
-  const topicsRef     = useRef(topics);
-  const storeRef      = useRef(null);
+  const eventsRef      = useRef(events);
+  const goalsRef       = useRef(goals);
+  const topicsRef      = useRef(topics);
+  const notesRef       = useRef(meetingNotes);
+  const storeRef       = useRef(null);
 
   useEffect(() => { eventsRef.current = events; }, [events]);
   useEffect(() => { goalsRef.current = goals; }, [goals]);
   useEffect(() => { topicsRef.current = topics; }, [topics]);
+  useEffect(() => { notesRef.current = meetingNotes; }, [meetingNotes]);
 
   // Rebuild store when session/profile changes
   useEffect(() => {
@@ -34,18 +37,20 @@ export function useData() {
     // Load all data
     (async () => {
       try {
-        const [e, g, t, lg, l] = await Promise.all([
+        const [e, g, t, lg, l, mn] = await Promise.all([
           storeRef.current.getAll('events'),
           storeRef.current.getAll('learning_goals'),
           storeRef.current.getAll('topics'),
           storeRef.current.getAll('link_groups'),
           storeRef.current.getAll('links'),
+          storeRef.current.getAll('meeting_notes'),
         ]);
         setEvents(e.data || []);
         setGoals(g.data || []);
         setTopics(t.data || []);
         setLinkGroups(lg.data || []);
         setLinks(l.data || []);
+        setMeetingNotes(mn.data || []);
       } catch (err) {
         console.warn('Data load error:', err);
       } finally {
@@ -150,11 +155,32 @@ export function useData() {
     await storeRef.current?.remove('links', id);
   };
 
+  // ── MEETING NOTES ────────────────────────────────────────────────────────────
+  const addMeetingNote = async (payload) => {
+    const item = { ...payload, id: uuid(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    setMeetingNotes(prev => [item, ...prev]);
+    await storeRef.current?.upsert('meeting_notes', item);
+    return item;
+  };
+
+  const updateMeetingNote = async (id, updates) => {
+    const updated_at = new Date().toISOString();
+    setMeetingNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates, updated_at } : n));
+    const current = notesRef.current.find(n => n.id === id);
+    if (current) await storeRef.current?.upsert('meeting_notes', { ...current, ...updates, updated_at });
+  };
+
+  const deleteMeetingNote = async (id) => {
+    setMeetingNotes(prev => prev.filter(n => n.id !== id));
+    await storeRef.current?.remove('meeting_notes', id);
+  };
+
   return {
-    ready, events, goals, topics, linkGroups, links,
+    ready, events, goals, topics, linkGroups, links, meetingNotes,
     addEvent, updateEvent, deleteEvent,
     addGoal, updateGoal, logHours, deleteGoal,
     addTopic, updateTopic, completeTopic, replaceTopics,
     addLinkGroup, addLink, deleteLink,
+    addMeetingNote, updateMeetingNote, deleteMeetingNote,
   };
 }

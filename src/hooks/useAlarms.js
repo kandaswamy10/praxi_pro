@@ -1,7 +1,7 @@
 // src/hooks/useAlarms.js
 import { useEffect, useRef, useState } from 'react';
 
-export function useAlarms(events) {
+export function useAlarms(events, onCreateNote) {
   const [alarmQueue, setAlarmQueue] = useState([]);
   const fired = useRef(new Set());
 
@@ -37,6 +37,15 @@ export function useAlarms(events) {
 
   const triggerAlarm = (event) => {
     setAlarmQueue(prev => [...prev, event]);
+    // Auto-create meeting note for work events when alarm fires at 0 min lead
+    if (onCreateNote && event.tab === 'work' && (event.alarm_lead_min === 0 || !event.alarm_lead_min)) {
+      onCreateNote({
+        event_id: event.id,
+        title: `Notes — ${event.title}`,
+        content: '',
+        tab: 'work',
+      });
+    }
     if (Notification.permission === 'granted') {
       const n = new Notification(`⏰ ${event.title}`, {
         body: `${event.date} at ${event.time || 'All day'}`,
