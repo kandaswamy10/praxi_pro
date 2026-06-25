@@ -50,6 +50,7 @@ function AppInner() {
   const [showAvatar, setShowAvatar]     = useState(false);
   const [voiceActive, setVoiceActive]   = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [showAddGoal,  setShowAddGoal]  = useState(false);
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) return (
@@ -113,6 +114,7 @@ function AppInner() {
           onReplaceTopics={data.replaceTopics}
           onAddLinkGroup={(name) => data.addLinkGroup('learning', name)}
           onAddLink={data.addLink} onDeleteLink={data.deleteLink}
+          triggerAddGoal={showAddGoal} onAddGoalDone={() => setShowAddGoal(false)}
         />
       );
       case 'work': return (
@@ -223,7 +225,7 @@ function AppInner() {
         {renderContent()}
       </div>
 
-      {/* Bottom input bar */}
+      {/* Bottom bar — context-aware per tab */}
       <div style={{ position: 'sticky', bottom: 0,
         background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)',
         borderTop: `1px solid ${g.surfaceBorder}`,
@@ -233,10 +235,16 @@ function AppInner() {
           border: `1px solid ${voiceActive ? g.card : g.surfaceBorder}`,
           borderRadius: '50%', width: 42, height: 42, cursor: 'pointer', fontSize: 18,
           flexShrink: 0 }}>🎤</button>
-        <button onClick={() => setShowAddEvent(true)} style={{
-          background: g.card, border: 'none', borderRadius: 999,
-          flex: 1, height: 42, cursor: 'pointer', color: '#fff',
-          fontSize: 15, fontWeight: 700 }}>＋ Add Event</button>
+        {tab === 'learning'
+          ? <button onClick={() => setShowAddGoal(true)} style={{
+              background: g.card, border: 'none', borderRadius: 999,
+              flex: 1, height: 42, cursor: 'pointer', color: '#fff',
+              fontSize: 15, fontWeight: 700 }}>＋ Add Goal</button>
+          : <button onClick={() => setShowAddEvent(true)} style={{
+              background: g.card, border: 'none', borderRadius: 999,
+              flex: 1, height: 42, cursor: 'pointer', color: '#fff',
+              fontSize: 15, fontWeight: 700 }}>＋ Add Event</button>
+        }
       </div>
     </div>
   );

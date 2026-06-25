@@ -315,8 +315,6 @@ function ActiveGoalCard({
 }) {
   const [treeView,     setTreeView]     = useState(false);
   const [showAddTopic, setShowAddTopic] = useState(false);
-  const [logVal,       setLogVal]       = useState('');
-  const [showLog,      setShowLog]      = useState(false);
   const [aiLoading,    setAiLoading]    = useState(false);
   const [aiError,      setAiError]      = useState('');
   const [activeQuiz,   setActiveQuiz]   = useState(null);
@@ -370,8 +368,8 @@ function ActiveGoalCard({
   return (
     <div>
       {/* Goal header card */}
-      <GemCard g={g} style={{ cursor: 'pointer', borderBottom: isActive ? `3px solid ${g.cardMuted}` : 'none' }}
-        onClick={() => onToggle(goal.id)}>
+      <GemCard g={g} style={{ borderBottom: isActive ? `3px solid ${g.cardMuted}` : 'none' }}>
+        <div onClick={() => onToggle(goal.id)} style={{ cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text bold color={g.cardText} size={15}>{goal.title}</Text>
@@ -386,33 +384,20 @@ function ActiveGoalCard({
         </div>
 
         <ProgressBar pct={pct} g={{ ...g, accent: g.cardMuted }} color={g.cardMuted} />
+        </div>{/* end tap zone */}
 
         <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {(goal.tags || []).map(t => (
             <span key={t} style={{ padding: '2px 8px', borderRadius: 999,
               background: 'rgba(255,255,255,0.15)', color: g.cardMuted, fontSize: 10 }}>{t}</span>
           ))}
-          <button onClick={e => { e.stopPropagation(); setShowLog(v => !v); }}
-            style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.2)', border: 'none',
-              color: g.cardText, borderRadius: 8, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}>
-            + Log hours
-          </button>
+
           <button onClick={e => { e.stopPropagation(); onCompleteGoal(goal.id, true); }}
             style={{ background: 'none', border: 'none', color: g.cardMuted, fontSize: 11, cursor: 'pointer' }}>
             ✓ Complete
           </button>
         </div>
 
-        {showLog && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={e => e.stopPropagation()}>
-            <input type="number" min={0.5} step={0.5} value={logVal} onChange={e => setLogVal(e.target.value)}
-              placeholder="Hours" style={{ background: 'rgba(255,255,255,0.2)', border: 'none',
-                color: g.cardText, borderRadius: 8, padding: '5px 10px', fontSize: 12, width: 80 }} />
-            <button onClick={() => { onLogHours(goal.id, logVal); setShowLog(false); setLogVal(''); }}
-              style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: g.cardText,
-                borderRadius: 8, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }}>Save</button>
-          </div>
-        )}
       </GemCard>
 
       {/* Expanded panel */}
@@ -574,9 +559,14 @@ export default function Learning({
   onLogHours, onDeleteGoal,
   onAddTopic, onCompleteTopic, onReplaceTopics,
   onAddLink, onDeleteLink,
+  triggerAddGoal, onAddGoalDone,
 }) {
   const [activeGoalId, setActiveGoalId] = useState(null);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
+
+  useEffect(() => {
+    if (triggerAddGoal) { setShowAddGoal(true); onAddGoalDone?.(); }
+  }, [triggerAddGoal]);
 
   const activeGoals    = goals.filter(g => !g.is_completed);
   const completedGoals = goals.filter(g => g.is_completed);
@@ -601,7 +591,6 @@ export default function Learning({
           <Text size={26} bold g={g}>Learning </Text>
           <Text size={26} italic color={g.accent}>Goals.</Text>
         </div>
-        <Btn g={g} size="sm" onClick={() => setShowAddGoal(true)}>＋ Goal</Btn>
       </div>
 
       {/* ── Overall progress strip ── */}
