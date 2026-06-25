@@ -7,6 +7,7 @@ import { GEMS, ALL_TABS } from './theme/gems.js';
 import Onboarding from './views/Onboarding.jsx';
 import Dashboard from './views/Dashboard.jsx';
 import Learning from './views/Learning.jsx';
+import Work from './views/Work.jsx';
 import { AlarmBanner, Surface, Text } from './components/ui.jsx';
 
 const ADS = {
@@ -109,6 +110,15 @@ function AppInner() {
           onAddTopic={data.addTopic} onCompleteTopic={data.completeTopic}
           onReplaceTopics={data.replaceTopics}
           onAddLinkGroup={(name) => data.addLinkGroup('learning', name)}
+          onAddLink={data.addLink} onDeleteLink={data.deleteLink}
+        />
+      );
+      case 'work': return (
+        <Work
+          events={data.events} linkGroups={data.linkGroups} links={data.links}
+          g={g}
+          onAddEvent={data.addEvent} onUpdateEvent={data.updateEvent} onDeleteEvent={data.deleteEvent}
+          onAddLinkGroup={(name) => data.addLinkGroup('work', name)}
           onAddLink={data.addLink} onDeleteLink={data.deleteLink}
         />
       );
