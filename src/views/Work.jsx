@@ -437,7 +437,7 @@ function StatsStrip({ events, g }) {
 // pointerType "pen" (stylus) always draws; mouse/touch draws only in draw mode.
 // Keyboard typing always goes to the text layer regardless of mode.
 
-function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange }) {
+function NoteSurface({ g, value, onChange, recording, drawMode }) {
   const wrapRef   = useRef(null);
   const editRef   = useRef(null);
   const canvasRef = useRef(null);
@@ -447,7 +447,7 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
   const [penColor, setPenColor] = useState('#1a1a2e');
   const [penSize,  setPenSize]  = useState(2.5);
 
-  // Sync value -> contenteditable without clobbering cursor position
+  // Sync value -> contenteditable without clobbering cursor
   useEffect(() => {
     const el = editRef.current;
     if (!el || el.innerText === value) return;
@@ -462,28 +462,17 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     } catch {}
   }, [value]);
 
-  // Size canvas bitmap to its actual CSS pixel size.
-  // Preserves existing ink by saving/restoring imageData.
+  // Size canvas bitmap to match its CSS box — preserves ink via imageData
   const resizeCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
-    if (canvas.width === w && canvas.height === h) {
-      // Same size — just ensure ctx style is current
-      if (ctxRef.current) {
-        ctxRef.current.strokeStyle = penColor;
-        ctxRef.current.lineWidth   = penSize;
-      }
-      return;
-    }
-    // Save existing drawing
+    if (!w || !h) return;
+    if (canvas.width === w && canvas.height === h) return; // no change, no wipe
     let saved = null;
-    if (canvas.width > 0 && canvas.height > 0) {
-      try { saved = ctxRef.current?.getImageData(0, 0, canvas.width, canvas.height); } catch {}
-    }
+    try { saved = ctxRef.current?.getImageData(0, 0, canvas.width, canvas.height); } catch {}
     canvas.width  = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
@@ -495,10 +484,10 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     if (saved) ctx.putImageData(saved, 0, 0);
   };
 
-  // Initial size after mount
+  // Size once after mount
   useEffect(() => { setTimeout(resizeCanvas, 60); }, []);
 
-  // Update stroke style only (no resize)
+  // Update stroke props only — never resize
   useEffect(() => {
     if (ctxRef.current) {
       ctxRef.current.strokeStyle = penColor;
@@ -506,7 +495,7 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     }
   }, [penColor, penSize]);
 
-  // Pointer handlers on canvas
+  // Pointer handlers
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -581,19 +570,17 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
         </div>
       )}
 
-      {/* Outer border — does NOT clip, just provides the visual frame */}
+      {/* Single surface — text layer + canvas overlay, no overflow clip */}
       <div ref={wrapRef} style={{
+        position: 'relative',
         border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
         borderRadius: drawMode ? '0 0 10px 10px' : 10,
         background: 'rgba(255,255,255,0.94)',
         transition: 'border-color .2s',
-        position: 'relative',
-        // Lined paper — scrolls with content
         backgroundImage: `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}44 24px)`,
         backgroundSize: '100% 24px',
         backgroundPositionY: '12px',
       }}>
-        {/* Placeholder */}
         {!value && (
           <div style={{
             position: 'absolute', top: 12, left: 14, pointerEvents: 'none',
@@ -603,7 +590,7 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
           </div>
         )}
 
-        {/* Editable text — grows freely, no overflow clip */}
+        {/* Text layer — grows freely, no clip */}
         <div
           ref={editRef}
           contentEditable
@@ -618,201 +605,13 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
           }}
         />
 
-        {/* Canvas — matches wrapper size exactly via explicit width/height attrs.
-            CSS width/height = 100% so it fills the box;
-            bitmap is sized once and preserved on resize via imageData save/restore. */}
+        {/* Canvas overlay — fixed bitmap size, CSS 100%x100% but imageRendering crisp.
+            Pointer events only active in draw mode or for pen input. */}
         <canvas
           ref={canvasRef}
           style={{
             position: 'absolute', top: 0, left: 0,
             width: '100%', height: '100%',
-            pointerEvents: drawMode ? 'all' : 'none',
-            zIndex: 2, touchAction: 'none',
-            // Prevent browser from interpolating/stretching the bitmap
-            imageRendering: 'pixelated',
-          }}
-        />
-      </div>
-    </div>
-  );
-}) {
-  const wrapRef   = useRef(null);
-  const editRef   = useRef(null);
-  const canvasRef = useRef(null);
-  const isDrawing = useRef(false);
-  const lastPt    = useRef(null);
-  const ctxRef    = useRef(null);
-  const [penColor, setPenColor] = useState('#1a1a2e');
-  const [penSize,  setPenSize]  = useState(2.5);
-
-  // Sync value → contenteditable without clobbering cursor
-  useEffect(() => {
-    const el = editRef.current;
-    if (!el) return;
-    if (el.innerText === value) return;
-    el.innerText = value;
-    // move cursor to end (for voice append)
-    try {
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      r.collapse(false);
-      const s = window.getSelection();
-      s.removeAllRanges();
-      s.addRange(r);
-    } catch {}
-  }, [value]);
-
-  // Size canvas ONCE on mount — resizing clears the bitmap, so never do it again
-  const sizeCanvas = () => {
-    const canvas = canvasRef.current;
-    const wrap   = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const rect = wrap.getBoundingClientRect();
-    if (!rect.width) return;
-    canvas.width  = rect.width;
-    canvas.height = rect.height;
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = penColor;
-    ctx.lineWidth   = penSize;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctxRef.current  = ctx;
-  };
-
-  // Only update stroke props — never resize (would wipe the drawing)
-  const updateCtxStyle = () => {
-    if (!ctxRef.current) return;
-    ctxRef.current.strokeStyle = penColor;
-    ctxRef.current.lineWidth   = penSize;
-  };
-
-  useEffect(() => { setTimeout(sizeCanvas, 50); }, []); // size once after mount
-  useEffect(() => { updateCtxStyle(); }, [penColor, penSize]); // style only
-
-  // Pointer handlers
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const isPen = (e) => e.pointerType === 'pen' || drawMode;
-
-    const getPos = (e) => {
-      const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
-    };
-
-    const onDown = (e) => {
-      if (!isPen(e)) return; // let text layer handle it
-      e.preventDefault();
-      isDrawing.current = true;
-      lastPt.current = getPos(e);
-      ctxRef.current?.beginPath();
-      ctxRef.current?.moveTo(lastPt.current.x, lastPt.current.y);
-    };
-    const onMove = (e) => {
-      if (!isDrawing.current) return;
-      e.preventDefault();
-      const pt = getPos(e);
-      ctxRef.current?.lineTo(pt.x, pt.y);
-      ctxRef.current?.stroke();
-      lastPt.current = pt;
-    };
-    const onUp = () => { isDrawing.current = false; };
-
-    canvas.addEventListener('pointerdown',  onDown);
-    canvas.addEventListener('pointermove',  onMove);
-    canvas.addEventListener('pointerup',    onUp);
-    canvas.addEventListener('pointerleave', onUp);
-    return () => {
-      canvas.removeEventListener('pointerdown',  onDown);
-      canvas.removeEventListener('pointermove',  onMove);
-      canvas.removeEventListener('pointerup',    onUp);
-      canvas.removeEventListener('pointerleave', onUp);
-    };
-  }, [drawMode, penColor, penSize]);
-
-  const clearCanvas = () => {
-    const c = canvasRef.current;
-    if (c && ctxRef.current) ctxRef.current.clearRect(0, 0, c.width, c.height);
-  };
-
-  return (
-    <div>
-      {/* Draw toolbar — pen color/size/clear, shown when draw mode on */}
-      {drawMode && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-          background: `${g.card}10`,
-          border: `1px solid ${g.surfaceBorder}`, borderBottom: 'none',
-          borderRadius: '10px 10px 0 0',
-        }}>
-          {['#1a1a2e','#e74c3c','#2980b9','#27ae60','#8e44ad'].map(c => (
-            <button key={c} onClick={() => setPenColor(c)} style={{
-              width: 18, height: 18, borderRadius: '50%', background: c,
-              border: 'none', cursor: 'pointer',
-              outline: penColor === c ? `2.5px solid ${g.card}` : 'none', outlineOffset: 2,
-            }} />
-          ))}
-          <select value={penSize} onChange={e => setPenSize(Number(e.target.value))} style={{
-            fontSize: 11, border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
-            padding: '2px 4px', background: 'white', color: g.text, marginLeft: 4,
-          }}>
-            <option value={1.5}>Thin</option>
-            <option value={2.5}>Normal</option>
-            <option value={5}>Thick</option>
-          </select>
-          <button onClick={clearCanvas} style={{
-            marginLeft: 'auto', fontSize: 11, padding: '2px 10px',
-            border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
-            background: 'white', color: g.muted, cursor: 'pointer',
-          }}>Clear ink</button>
-        </div>
-      )}
-
-      {/* The single surface */}
-      <div ref={wrapRef} style={{
-        position: 'relative',
-        border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
-        borderRadius: drawMode ? '0 0 10px 10px' : 10,
-        overflow: 'hidden',
-        background: 'rgba(255,255,255,0.94)',
-        transition: 'border-color .2s',
-        backgroundImage: `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}44 24px)`,
-        backgroundSize: '100% 24px',
-        backgroundPositionY: '12px',
-      }}>
-        {/* Placeholder */}
-        {!value && (
-          <div style={{
-            position: 'absolute', top: 12, left: 14, pointerEvents: 'none',
-            color: g.muted, fontSize: 13, lineHeight: '24px', userSelect: 'none',
-          }}>
-            {recording ? 'Listening… speak now' : 'Type, paste, draw or dictate…'}
-          </div>
-        )}
-
-        {/* Editable text layer */}
-        <div
-          ref={editRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={() => onChange(editRef.current?.innerText || '')}
-          style={{
-            minHeight: 180, padding: '12px 14px',
-            fontSize: 13, lineHeight: '24px',
-            color: g.text, outline: 'none',
-            fontFamily: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            position: 'relative', zIndex: 1,
-          }}
-        />
-
-        {/* Canvas overlay — transparent, intercepts only pen/draw-mode strokes */}
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%',
-            // Always pass through regular mouse/touch; pointer events handled in JS
             pointerEvents: drawMode ? 'all' : 'none',
             zIndex: 2, touchAction: 'none',
           }}
