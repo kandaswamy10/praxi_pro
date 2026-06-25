@@ -438,8 +438,6 @@ function StatsStrip({ events, g }) {
 // Keyboard typing always goes to the text layer regardless of mode.
 
 function NoteSurface({ g, value, onChange, recording, drawMode }) {
-  const wrapRef   = useRef(null);
-  const editRef   = useRef(null);
   const canvasRef = useRef(null);
   const isDrawing = useRef(false);
   const lastPt    = useRef(null);
@@ -447,52 +445,31 @@ function NoteSurface({ g, value, onChange, recording, drawMode }) {
   const [penColor, setPenColor] = useState('#1a1a2e');
   const [penSize,  setPenSize]  = useState(2.5);
 
-  // Sync value -> contenteditable without clobbering cursor
+  // Size canvas bitmap exactly once to its real pixel size — never again.
+  // Canvas has a fixed CSS height so it never grows, so bitmap never needs resize.
   useEffect(() => {
-    const el = editRef.current;
-    if (!el || el.innerText === value) return;
-    el.innerText = value;
-    try {
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      r.collapse(false);
-      const s = window.getSelection();
-      s.removeAllRanges();
-      s.addRange(r);
-    } catch {}
-  }, [value]);
-
-  // Size canvas bitmap to match its CSS box — preserves ink via imageData
-  const resizeCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const w = Math.round(rect.width);
-    const h = Math.round(rect.height);
-    if (!w || !h) return;
-    if (canvas.width === w && canvas.height === h) return; // no change, no wipe
-    let saved = null;
-    try { saved = ctxRef.current?.getImageData(0, 0, canvas.width, canvas.height); } catch {}
-    canvas.width  = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = penColor;
-    ctx.lineWidth   = penSize;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctxRef.current  = ctx;
-    if (saved) ctx.putImageData(saved, 0, 0);
-  };
+    const run = () => {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) { setTimeout(run, 50); return; }
+      canvas.width  = Math.round(rect.width);
+      canvas.height = Math.round(rect.height);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = penColor;
+      ctx.lineWidth   = penSize;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+      ctxRef.current  = ctx;
+    };
+    run();
+  }, []); // [] — runs once only
 
-  // Size once after mount
-  useEffect(() => { setTimeout(resizeCanvas, 60); }, []);
-
-  // Update stroke props only — never resize
+  // Update stroke style only, never resize
   useEffect(() => {
-    if (ctxRef.current) {
-      ctxRef.current.strokeStyle = penColor;
-      ctxRef.current.lineWidth   = penSize;
-    }
+    if (!ctxRef.current) return;
+    ctxRef.current.strokeStyle = penColor;
+    ctxRef.current.lineWidth   = penSize;
   }, [penColor, penSize]);
 
   // Pointer handlers
@@ -538,14 +515,17 @@ function NoteSurface({ g, value, onChange, recording, drawMode }) {
     if (c && ctxRef.current) ctxRef.current.clearRect(0, 0, c.width, c.height);
   };
 
+  const border = `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`;
+  const linesBg = `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}44 24px)`;
+
   return (
-    <div>
+    <div style={{ borderRadius: 10, overflow: 'hidden', border }}>
+
+      {/* Draw toolbar */}
       {drawMode && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-          background: `${g.card}10`,
-          border: `1px solid ${g.surfaceBorder}`, borderBottom: 'none',
-          borderRadius: '10px 10px 0 0',
+          background: `${g.card}10`, borderBottom: `1px solid ${g.surfaceBorder}`,
         }}>
           {['#1a1a2e','#e74c3c','#2980b9','#27ae60','#8e44ad'].map(c => (
             <button key={c} onClick={() => setPenColor(c)} style={{
@@ -570,50 +550,51 @@ function NoteSurface({ g, value, onChange, recording, drawMode }) {
         </div>
       )}
 
-      {/* Single surface — text layer + canvas overlay, no overflow clip */}
-      <div ref={wrapRef} style={{
-        position: 'relative',
-        border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
-        borderRadius: drawMode ? '0 0 10px 10px' : 10,
-        background: 'rgba(255,255,255,0.94)',
-        transition: 'border-color .2s',
-        backgroundImage: `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}44 24px)`,
-        backgroundSize: '100% 24px',
-        backgroundPositionY: '12px',
-      }}>
+      {/* Canvas — fixed height, never grows, bitmap never rescales */}
+      <div style={{ position: 'relative', height: 160, background: 'rgba(255,255,255,0.94)',
+        backgroundImage: linesBg, backgroundSize: '100% 24px', backgroundPositionY: '8px',
+        borderBottom: `1px solid ${g.surfaceBorder}` }}>
+        <canvas ref={canvasRef} style={{
+          position: 'absolute', inset: 0,
+          width: '100%', height: '100%',
+          pointerEvents: drawMode ? 'all' : 'none',
+          touchAction: 'none', zIndex: 1,
+          cursor: drawMode ? 'crosshair' : 'default',
+        }} />
+        {!drawMode && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none', zIndex: 2,
+          }}>
+            <span style={{ fontSize: 11, color: g.muted, opacity: 0.5 }}>
+              ✏️ Enable Draw to write here
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Text area — independent scroll, never affects canvas size */}
+      <div style={{ position: 'relative', background: 'rgba(255,255,255,0.94)',
+        backgroundImage: linesBg, backgroundSize: '100% 24px', backgroundPositionY: '8px' }}>
         {!value && (
           <div style={{
             position: 'absolute', top: 12, left: 14, pointerEvents: 'none',
-            color: g.muted, fontSize: 13, lineHeight: '24px', userSelect: 'none', zIndex: 0,
+            color: g.muted, fontSize: 13, lineHeight: '24px', userSelect: 'none',
           }}>
-            {recording ? 'Listening… speak now' : 'Type, paste, draw or dictate…'}
+            {recording ? 'Listening… speak now' : 'Type, paste or dictate your notes…'}
           </div>
         )}
-
-        {/* Text layer — grows freely, no clip */}
-        <div
-          ref={editRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={() => onChange(editRef.current?.innerText || '')}
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
           style={{
-            minHeight: 180, padding: '12px 14px',
-            fontSize: 13, lineHeight: '24px',
-            color: g.text, outline: 'none',
-            fontFamily: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            position: 'relative', zIndex: 1,
-          }}
-        />
-
-        {/* Canvas overlay — fixed bitmap size, CSS 100%x100% but imageRendering crisp.
-            Pointer events only active in draw mode or for pen input. */}
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute', top: 0, left: 0,
-            width: '100%', height: '100%',
-            pointerEvents: drawMode ? 'all' : 'none',
-            zIndex: 2, touchAction: 'none',
+            display: 'block', width: '100%', minHeight: 120, maxHeight: 320,
+            padding: '12px 14px', boxSizing: 'border-box',
+            border: 'none', outline: 'none', resize: 'none',
+            fontFamily: 'inherit', fontSize: 13, lineHeight: '24px',
+            background: 'transparent', color: g.text,
+            overflowY: 'auto',
           }}
         />
       </div>
