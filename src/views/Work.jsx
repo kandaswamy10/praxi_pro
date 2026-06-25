@@ -464,8 +464,8 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     } catch {}
   }, [value]);
 
-  // Init / re-init canvas context
-  const initCtx = () => {
+  // Size canvas ONCE on mount — resizing clears the bitmap, so never do it again
+  const sizeCanvas = () => {
     const canvas = canvasRef.current;
     const wrap   = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -481,9 +481,15 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     ctxRef.current  = ctx;
   };
 
-  useEffect(() => { initCtx(); }, [penColor, penSize]);
-  // Re-init on first render after mount
-  useEffect(() => { setTimeout(initCtx, 50); }, []);
+  // Only update stroke props — never resize (would wipe the drawing)
+  const updateCtxStyle = () => {
+    if (!ctxRef.current) return;
+    ctxRef.current.strokeStyle = penColor;
+    ctxRef.current.lineWidth   = penSize;
+  };
+
+  useEffect(() => { setTimeout(sizeCanvas, 50); }, []); // size once after mount
+  useEffect(() => { updateCtxStyle(); }, [penColor, penSize]); // style only
 
   // Pointer handlers
   useEffect(() => {
@@ -500,7 +506,6 @@ function NoteSurface({ g, value, onChange, recording, drawMode, onDrawModeChange
     const onDown = (e) => {
       if (!isPen(e)) return; // let text layer handle it
       e.preventDefault();
-      initCtx();
       isDrawing.current = true;
       lastPt.current = getPos(e);
       ctxRef.current?.beginPath();
