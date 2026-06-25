@@ -436,109 +436,115 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
   const [title, setTitle]       = useState(initial.title || '');
   const [content, setContent]   = useState(initial.content || '');
   const [eventId, setEventId]   = useState(initial.event_id || '');
-  const [inputMode, setInputMode] = useState('type'); // type | pen | voice
   const [recording, setRecording] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError]   = useState('');
-  const penRef   = useRef(null);
-  const recRef   = useRef(null);
-  const isDrawing = useRef(false);
-  const lastPt    = useRef(null);
+  const [penActive, setPenActive] = useState(false); // show/hide canvas
 
-  // ── Pen (canvas) ────────────────────────────────────────────────────────────
+  const penRef     = useRef(null);
+  const recRef     = useRef(null);
+  const isDrawing  = useRef(false);
+  const lastPt     = useRef(null);
+  const finalRef   = useRef(content); // keeps voice finalText in sync with content edits
 
+  // keep finalRef in sync so voice appends to current content
+  useEffect(() => { finalRef.current = content; }, [content]);
+
+  // ── Canvas setup (runs once canvas mounts) ───────────────────────────────────
   useEffect(() => {
-    if (inputMode !== 'pen' || !penRef.current) return;
+    if (!penActive || !penRef.current) return;
     const canvas = penRef.current;
+    // size to actual rendered pixels
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = rect.width;
+    canvas.height = rect.height;
     const ctx = canvas.getContext('2d');
-    canvas.width  = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
     ctx.strokeStyle = g.text;
-    ctx.lineWidth   = 2;
+    ctx.lineWidth   = 2.5;
     ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
 
     const getPos = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const src  = e.touches ? e.touches[0] : e;
-      return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+      const r   = canvas.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: src.clientX - r.left, y: src.clientY - r.top };
     };
-    const start = (e) => { e.preventDefault(); isDrawing.current = true; lastPt.current = getPos(e); };
-    const move  = (e) => {
+    const start = (e) => {
+      e.preventDefault();
+      isDrawing.current = true;
+      lastPt.current = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(lastPt.current.x, lastPt.current.y);
+    };
+    const move = (e) => {
       e.preventDefault();
       if (!isDrawing.current) return;
       const pt = getPos(e);
-      ctx.beginPath();
-      ctx.moveTo(lastPt.current.x, lastPt.current.y);
       ctx.lineTo(pt.x, pt.y);
       ctx.stroke();
       lastPt.current = pt;
     };
-    const end = () => { isDrawing.current = false; lastPt.current = null; };
+    const end = () => { isDrawing.current = false; };
 
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mousedown',  start);
+    canvas.addEventListener('mousemove',  move);
+    canvas.addEventListener('mouseup',    end);
+    canvas.addEventListener('mouseleave', end);
     canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    canvas.addEventListener('touchend', end);
+    canvas.addEventListener('touchmove',  move,  { passive: false });
+    canvas.addEventListener('touchend',   end);
     return () => {
-      canvas.removeEventListener('mousedown', start);
-      canvas.removeEventListener('mousemove', move);
-      canvas.removeEventListener('mouseup', end);
+      canvas.removeEventListener('mousedown',  start);
+      canvas.removeEventListener('mousemove',  move);
+      canvas.removeEventListener('mouseup',    end);
+      canvas.removeEventListener('mouseleave', end);
       canvas.removeEventListener('touchstart', start);
-      canvas.removeEventListener('touchmove', move);
-      canvas.removeEventListener('touchend', end);
+      canvas.removeEventListener('touchmove',  move);
+      canvas.removeEventListener('touchend',   end);
     };
-  }, [inputMode, g.text]);
+  }, [penActive, g.text]);
 
-  // ── Voice ────────────────────────────────────────────────────────────────────
-
+  // ── Voice ─────────────────────────────────────────────────────────────────────
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setAiError('Voice not supported — try Chrome.'); return; }
+    if (!SR) { setAiError('Voice not supported in this browser — try Chrome.'); return; }
     const rec = new SR();
     rec.lang = 'en-US';
     rec.continuous = true;
     rec.interimResults = true;
-    let finalText = content;
+    let final = finalRef.current;
+
     rec.onresult = (e) => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += (finalText ? '\n' : '') + t;
+        if (e.results[i].isFinal) final += (final ? '\n' : '') + t;
         else interim = t;
       }
-      setContent(finalText + (interim ? ` [${interim}]` : ''));
+      // show interim in brackets, commit on final
+      setContent(final + (interim ? ` [${interim}]` : ''));
     };
-    rec.onend = () => {
-      setRecording(false);
-      setContent(finalText);
-    };
-    rec.onerror = (e) => { setAiError(`Voice error: ${e.error}`); setRecording(false); };
+    rec.onend  = () => { setRecording(false); setContent(final); finalRef.current = final; };
+    rec.onerror = (e) => { setAiError(`Mic error: ${e.error}`); setRecording(false); };
     rec.start();
     recRef.current = rec;
     setRecording(true);
   };
 
-  const stopVoice = () => {
-    recRef.current?.stop();
-    setRecording(false);
-  };
+  const stopVoice = () => { recRef.current?.stop(); setRecording(false); };
 
-  // ── AI cleanup ───────────────────────────────────────────────────────────────
-
+  // ── AI cleanup ────────────────────────────────────────────────────────────────
   const cleanWithAI = async () => {
     if (!content.trim()) return;
     setAiLoading(true); setAiError('');
     try {
       const result = await callAI(
-        'chat',
-        content,
-        'You are a meeting notes assistant. Clean up and structure the following raw meeting notes. Fix grammar, remove filler words, organise into bullet points with clear headings. Keep it concise. Return only the cleaned notes, no preamble.',
+        'chat', content,
+        'You are a meeting notes assistant. Clean up and structure the following raw notes. Fix grammar, remove filler words, organise into clear bullet points with headings. Keep it concise. Return only the cleaned notes, no preamble.',
         aiConfig || DEFAULT_AI_CONFIG,
       );
       setContent(result.trim());
-    } catch (e) {
+    } catch {
       setAiError('AI unavailable — notes saved as-is.');
     } finally {
       setAiLoading(false);
@@ -561,122 +567,119 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
           onChange={e => setTitle(e.target.value)} autoFocus />
 
         {/* Link to event */}
-        <div>
-          <SectionLabel g={g}>Link to Event (optional)</SectionLabel>
-          <Select g={g} value={eventId} onChange={e => setEventId(e.target.value)}>
-            <option value="">— Standalone note —</option>
-            {workEvents.map(ev => (
-              <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
-            ))}
-          </Select>
-        </div>
-
-        {/* Input mode tabs */}
-        <div style={{ display: 'flex', gap: 6, borderBottom: `1px solid ${g.surfaceBorder}`, paddingBottom: 8 }}>
-          {[
-            { id: 'type',  label: '⌨️ Type' },
-            { id: 'pen',   label: '✏️ Write' },
-            { id: 'voice', label: '🎤 Voice' },
-          ].map(m => (
-            <button key={m.id} onClick={() => setInputMode(m.id)} style={{
-              padding: '5px 12px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
-              background: inputMode === m.id ? g.card : 'rgba(255,255,255,0.8)',
-              color: inputMode === m.id ? '#fff' : g.muted,
-              border: `1.5px solid ${inputMode === m.id ? g.card : g.surfaceBorder}`,
-              fontWeight: 600,
-            }}>{m.label}</button>
+        <Select g={g} value={eventId} onChange={e => setEventId(e.target.value)}>
+          <option value="">— Standalone note —</option>
+          {workEvents.map(ev => (
+            <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
           ))}
-        </div>
+        </Select>
 
-        {/* Type mode */}
-        {inputMode === 'type' && (
-          <Textarea g={g}
-            placeholder="Type or paste your notes here…"
+        {/* ── Unified note surface ── */}
+        <div style={{
+          border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
+          borderRadius: 12, overflow: 'hidden',
+          transition: 'border-color .2s',
+          background: 'rgba(255,255,255,0.92)',
+        }}>
+
+          {/* Pen canvas — shown when toggled */}
+          {penActive && (
+            <div style={{ position: 'relative', borderBottom: `1px solid ${g.surfaceBorder}` }}>
+              <canvas ref={penRef} style={{
+                display: 'block', width: '100%', height: 160,
+                cursor: 'crosshair', touchAction: 'none',
+                background: `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}55 24px)`,
+              }} />
+              <button onClick={() => {
+                const ctx = penRef.current?.getContext('2d');
+                if (ctx) ctx.clearRect(0, 0, penRef.current.width, penRef.current.height);
+              }} style={{
+                position: 'absolute', top: 6, right: 8,
+                background: 'rgba(255,255,255,0.85)', border: `1px solid ${g.surfaceBorder}`,
+                borderRadius: 6, padding: '2px 8px', fontSize: 11,
+                color: g.muted, cursor: 'pointer',
+              }}>Clear</button>
+            </div>
+          )}
+
+          {/* Textarea — always visible */}
+          <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
-            style={{ minHeight: 160 }}
+            placeholder={recording ? 'Listening… speak now' : 'Type, paste, or dictate your notes…'}
+            style={{
+              width: '100%', minHeight: 140, padding: '12px 14px',
+              border: 'none', outline: 'none', resize: 'vertical',
+              fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6,
+              background: 'transparent', color: g.text,
+              boxSizing: 'border-box',
+            }}
           />
-        )}
 
-        {/* Pen / handwriting mode */}
-        {inputMode === 'pen' && (
-          <div>
-            <canvas ref={penRef} style={{
-              width: '100%', height: 200, borderRadius: 10,
-              border: `1.5px solid ${g.surfaceBorder}`,
-              background: 'rgba(255,255,255,0.9)',
-              cursor: 'crosshair', touchAction: 'none',
-              display: 'block',
-            }} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <Btn g={g} size="sm" variant="secondary"
-                onClick={() => {
-                  const ctx = penRef.current?.getContext('2d');
-                  if (ctx) ctx.clearRect(0, 0, penRef.current.width, penRef.current.height);
-                }}>Clear</Btn>
-              <Text size={11} muted g={g} style={{ alignSelf: 'center' }}>
-                Pen / stylus / touch supported
-              </Text>
-            </div>
-            {/* Also show text area for typed notes alongside */}
-            <div style={{ marginTop: 8 }}>
-              <SectionLabel g={g}>Typed notes (optional)</SectionLabel>
-              <Textarea g={g} placeholder="Add typed notes alongside your handwriting…"
-                value={content} onChange={e => setContent(e.target.value)} style={{ minHeight: 60 }} />
-            </div>
-          </div>
-        )}
+          {/* Toolbar row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+            borderTop: `1px solid ${g.surfaceBorder}`,
+            background: `${g.card}06`,
+          }}>
 
-        {/* Voice mode */}
-        {inputMode === 'voice' && (
-          <div>
-            <div style={{
-              background: recording ? `${g.urgentBar}12` : `${g.card}08`,
-              border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
-              borderRadius: 12, padding: '20px', textAlign: 'center', marginBottom: 8,
-            }}>
-              <button onClick={recording ? stopVoice : startVoice} style={{
-                width: 64, height: 64, borderRadius: '50%', border: 'none',
-                background: recording ? g.urgentBar : g.card,
-                color: '#fff', fontSize: 28, cursor: 'pointer',
-                boxShadow: recording ? `0 0 0 8px ${g.urgentBar}30` : 'none',
-                transition: 'all .2s',
+            {/* Pen toggle */}
+            <button onClick={() => setPenActive(v => !v)} title="Handwriting canvas" style={{
+              background: penActive ? `${g.card}22` : 'transparent',
+              border: `1px solid ${penActive ? g.card : 'transparent'}`,
+              borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
+              fontSize: 16, color: penActive ? g.card : g.muted,
+            }}>✏️</button>
+
+            {/* Mic button */}
+            <button
+              onClick={recording ? stopVoice : startVoice}
+              title={recording ? 'Stop recording' : 'Voice to text'}
+              style={{
+                background: recording ? g.urgentBar : 'transparent',
+                border: `1px solid ${recording ? g.urgentBar : 'transparent'}`,
+                borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
+                fontSize: 16, color: recording ? '#fff' : g.muted,
+                transition: 'all .15s',
               }}>🎤</button>
-              <div style={{ marginTop: 10 }}>
-                <Text size={13} bold g={g}>{recording ? 'Recording… tap to stop' : 'Tap to start recording'}</Text>
-              </div>
-              {recording && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 3, marginTop: 8 }}>
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} style={{
-                      width: 4, background: g.urgentBar, borderRadius: 2,
-                      height: 8 + Math.sin(Date.now() / 200 + i) * 8,
-                      animation: `pulse-${i} 0.5s ease infinite alternate`,
-                    }} />
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Live transcript */}
-            <Textarea g={g}
-              placeholder="Transcript will appear here…"
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              style={{ minHeight: 100 }}
-            />
-          </div>
-        )}
 
-        {/* AI cleanup button */}
-        {content.trim().length > 20 && (
-          <Btn g={g} variant="secondary" size="sm"
-            onClick={cleanWithAI} style={{ alignSelf: 'flex-start' }}>
-            {aiLoading ? '⏳ Cleaning…' : '✨ Clean up with AI'}
-          </Btn>
-        )}
+            {/* Recording pulse */}
+            {recording && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{
+                    width: 3, borderRadius: 2, background: g.urgentBar,
+                    height: 6 + (i % 2 === 0 ? 8 : 4),
+                    opacity: 0.7 + i * 0.08,
+                    animation: `wave${i} .6s ease-in-out ${i * 0.15}s infinite alternate`,
+                  }} />
+                ))}
+                <Text size={11} style={{ color: g.urgentBar, marginLeft: 4 }}>Recording</Text>
+              </div>
+            )}
+
+            {/* AI cleanup — right side */}
+            {content.trim().length > 20 && !recording && (
+              <button onClick={cleanWithAI} disabled={aiLoading} title="Clean up with AI" style={{
+                marginLeft: 'auto', background: `${g.card}15`,
+                border: `1px solid ${g.surfaceBorder}`,
+                borderRadius: 8, padding: '5px 10px', cursor: aiLoading ? 'wait' : 'pointer',
+                fontSize: 12, color: g.card, fontWeight: 600,
+              }}>{aiLoading ? '⏳' : '✨'} {aiLoading ? 'Cleaning…' : 'AI Clean'}</button>
+            )}
+
+            {/* Char count */}
+            {content.length > 0 && (
+              <Text size={10} muted g={g} style={{ marginLeft: recording ? 0 : 'auto', flexShrink: 0 }}>
+                {content.length} chars
+              </Text>
+            )}
+          </div>
+        </div>
+
         {aiError && <Text size={11} style={{ color: g.urgentBar }}>{aiError}</Text>}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <Btn g={g} size="lg" onClick={handleSave} style={{ flex: 1 }}>
             {initial.id ? 'Save Changes' : '💾 Save Note'}
           </Btn>
