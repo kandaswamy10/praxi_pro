@@ -13,22 +13,22 @@ const ENDPOINTS = {
 // Default per-feature config (all free / no key required by default)
 export const DEFAULT_AI_CONFIG = {
   features: {
-    topicClassify:   { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', temperature: 0.2, maxTokens: 1500 },
-    topicOrder:      { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', temperature: 0.2, maxTokens: 1500 },
-    nextTopic:       { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', temperature: 0.3, maxTokens: 256  },
-    quizGenerate:    { provider: 'openrouter', model: 'mistralai/mistral-7b-instruct:free',      temperature: 0.6, maxTokens: 1000 },
+    topicClassify:   { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', temperature: 0.2, maxTokens: 1500 },
+    topicOrder:      { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', temperature: 0.2, maxTokens: 1500 },
+    nextTopic:       { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', temperature: 0.3, maxTokens: 256  },
+    quizGenerate:    { provider: 'openrouter', model: 'openrouter/free',      temperature: 0.6, maxTokens: 1000 },
     billExtract:     { provider: 'huggingface', model: 'mistralai/Mistral-7B-Instruct-v0.2',    temperature: 0.1, maxTokens: 512  },
-    offerCompare:    { provider: 'openrouter', model: 'mistralai/mistral-7b-instruct:free',      temperature: 0.4, maxTokens: 800  },
-    urlClassify:     { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', temperature: 0.1, maxTokens: 32   },
-    chat:            { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', temperature: 0.8, maxTokens: 2048 },
+    offerCompare:    { provider: 'openrouter', model: 'openrouter/free',      temperature: 0.4, maxTokens: 800  },
+    urlClassify:     { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', temperature: 0.1, maxTokens: 32   },
+    chat:            { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', temperature: 0.8, maxTokens: 2048 },
   },
   apiKeys: {},
 };
 
 // Fallback chain — tried in order when primary fails
 const FALLBACK_CHAIN = [
-  { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', requiresKey: false },
-  { provider: 'openrouter', model: 'mistralai/mistral-7b-instruct:free',     requiresKey: false },
+  { provider: 'openrouter', model: 'meta-llama/llama-4-scout:free', requiresKey: false },
+  { provider: 'openrouter', model: 'openrouter/free',     requiresKey: false },
   { provider: 'huggingface', model: 'mistralai/Mistral-7B-Instruct-v0.2',   requiresKey: true  },
   { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',             requiresKey: true  },
 ];
