@@ -437,52 +437,45 @@ function StatsStrip({ events, g }) {
 // pointerType "pen" (stylus) always draws; mouse/touch draws only in draw mode.
 // Keyboard typing always goes to the text layer regardless of mode.
 
-function NoteSurface({ g, value, onChange, recording, drawMode }) {
-  const canvasRef = useRef(null);
+// ── DRAW CANVAS ──────────────────────────────────────────────────────────────
+// Fixed 1400px tall canvas inside a scrollable container — bitmap never resizes.
+
+function DrawCanvas({ g, canvasRef }) {
   const isDrawing = useRef(false);
   const lastPt    = useRef(null);
   const ctxRef    = useRef(null);
   const [penColor, setPenColor] = useState('#1a1a2e');
   const [penSize,  setPenSize]  = useState(2.5);
+  const CANVAS_H = 1400;
 
-  // Size canvas bitmap exactly once to its real pixel size — never again.
-  // Canvas has a fixed CSS height so it never grows, so bitmap never needs resize.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const run = () => {
-      const rect = canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) { setTimeout(run, 50); return; }
-      canvas.width  = Math.round(rect.width);
-      canvas.height = Math.round(rect.height);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = penColor;
-      ctx.lineWidth   = penSize;
-      ctx.lineCap     = 'round';
-      ctx.lineJoin    = 'round';
-      ctxRef.current  = ctx;
-    };
-    run();
-  }, []); // [] — runs once only
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(rect.width) || 600;
+    canvas.height = CANVAS_H;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = penColor;
+    ctx.lineWidth   = penSize;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctxRef.current  = ctx;
+  }, []);
 
-  // Update stroke style only, never resize
   useEffect(() => {
     if (!ctxRef.current) return;
     ctxRef.current.strokeStyle = penColor;
     ctxRef.current.lineWidth   = penSize;
   }, [penColor, penSize]);
 
-  // Pointer handlers
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const isPen = (e) => e.pointerType === 'pen' || drawMode;
     const getPos = (e) => {
       const r = canvas.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     const onDown = (e) => {
-      if (!isPen(e)) return;
       e.preventDefault();
       isDrawing.current = true;
       lastPt.current = getPos(e);
@@ -508,93 +501,63 @@ function NoteSurface({ g, value, onChange, recording, drawMode }) {
       canvas.removeEventListener('pointerup',    onUp);
       canvas.removeEventListener('pointerleave', onUp);
     };
-  }, [drawMode, penColor, penSize]);
+  }, [penColor, penSize]);
 
   const clearCanvas = () => {
     const c = canvasRef.current;
     if (c && ctxRef.current) ctxRef.current.clearRect(0, 0, c.width, c.height);
   };
 
-  const border = `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`;
-  const linesBg = `repeating-linear-gradient(transparent, transparent 23px, ${g.surfaceBorder}44 24px)`;
+  const linesBg = `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}55 28px)`;
 
   return (
-    <div style={{ borderRadius: 10, overflow: 'hidden', border }}>
-
-      {/* Draw toolbar */}
-      {drawMode && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-          background: `${g.card}10`, borderBottom: `1px solid ${g.surfaceBorder}`,
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+        background: `${g.card}10`, borderBottom: `1px solid ${g.surfaceBorder}`,
+        flexShrink: 0,
+      }}>
+        {['#1a1a2e','#e74c3c','#2980b9','#27ae60','#8e44ad','#f39c12'].map(c => (
+          <button key={c} onClick={() => setPenColor(c)} style={{
+            width: 20, height: 20, borderRadius: '50%', background: c,
+            border: 'none', cursor: 'pointer', flexShrink: 0,
+            outline: penColor === c ? `3px solid ${g.card}` : '2px solid transparent',
+            outlineOffset: 2,
+          }} />
+        ))}
+        <select value={penSize} onChange={e => setPenSize(Number(e.target.value))} style={{
+          fontSize: 12, border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
+          padding: '3px 6px', background: 'white', color: g.text, marginLeft: 4,
         }}>
-          {['#1a1a2e','#e74c3c','#2980b9','#27ae60','#8e44ad'].map(c => (
-            <button key={c} onClick={() => setPenColor(c)} style={{
-              width: 18, height: 18, borderRadius: '50%', background: c,
-              border: 'none', cursor: 'pointer',
-              outline: penColor === c ? `2.5px solid ${g.card}` : 'none', outlineOffset: 2,
-            }} />
-          ))}
-          <select value={penSize} onChange={e => setPenSize(Number(e.target.value))} style={{
-            fontSize: 11, border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
-            padding: '2px 4px', background: 'white', color: g.text, marginLeft: 4,
-          }}>
-            <option value={1.5}>Thin</option>
-            <option value={2.5}>Normal</option>
-            <option value={5}>Thick</option>
-          </select>
-          <button onClick={clearCanvas} style={{
-            marginLeft: 'auto', fontSize: 11, padding: '2px 10px',
-            border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
-            background: 'white', color: g.muted, cursor: 'pointer',
-          }}>Clear ink</button>
-        </div>
-      )}
-
-      {/* Canvas — fixed height, never grows, bitmap never rescales */}
-      <div style={{ position: 'relative', height: 160, background: 'rgba(255,255,255,0.94)',
-        backgroundImage: linesBg, backgroundSize: '100% 24px', backgroundPositionY: '8px',
-        borderBottom: `1px solid ${g.surfaceBorder}` }}>
-        <canvas ref={canvasRef} style={{
-          position: 'absolute', inset: 0,
-          width: '100%', height: '100%',
-          pointerEvents: drawMode ? 'all' : 'none',
-          touchAction: 'none', zIndex: 1,
-          cursor: drawMode ? 'crosshair' : 'default',
-        }} />
-        {!drawMode && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            pointerEvents: 'none', zIndex: 2,
-          }}>
-            <span style={{ fontSize: 11, color: g.muted, opacity: 0.5 }}>
-              ✏️ Enable Draw to write here
-            </span>
-          </div>
-        )}
+          <option value={1}>Fine</option>
+          <option value={2.5}>Normal</option>
+          <option value={5}>Thick</option>
+          <option value={10}>Marker</option>
+        </select>
+        <button onClick={clearCanvas} style={{
+          marginLeft: 'auto', fontSize: 12, padding: '4px 12px',
+          border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
+          background: 'white', color: g.muted, cursor: 'pointer',
+        }}>Clear</button>
       </div>
 
-      {/* Text area — independent scroll, never affects canvas size */}
-      <div style={{ position: 'relative', background: 'rgba(255,255,255,0.94)',
-        backgroundImage: linesBg, backgroundSize: '100% 24px', backgroundPositionY: '8px' }}>
-        {!value && (
-          <div style={{
-            position: 'absolute', top: 12, left: 14, pointerEvents: 'none',
-            color: g.muted, fontSize: 13, lineHeight: '24px', userSelect: 'none',
-          }}>
-            {recording ? 'Listening… speak now' : 'Type, paste or dictate your notes…'}
-          </div>
-        )}
-        <textarea
-          value={value}
-          onChange={e => onChange(e.target.value)}
+      {/* Scrollable canvas area */}
+      <div style={{
+        flex: 1, overflowY: 'auto', overflowX: 'hidden',
+        background: 'white',
+        backgroundImage: linesBg,
+        backgroundSize: '100% 28px',
+        backgroundPositionY: '4px',
+      }}>
+        <canvas
+          ref={canvasRef}
           style={{
-            display: 'block', width: '100%', minHeight: 120, maxHeight: 320,
-            padding: '12px 14px', boxSizing: 'border-box',
-            border: 'none', outline: 'none', resize: 'none',
-            fontFamily: 'inherit', fontSize: 13, lineHeight: '24px',
-            background: 'transparent', color: g.text,
-            overflowY: 'auto',
+            display: 'block',
+            width: '100%',
+            height: `${CANVAS_H}px`,
+            touchAction: 'none',
+            cursor: 'crosshair',
           }}
         />
       </div>
@@ -602,18 +565,16 @@ function NoteSurface({ g, value, onChange, recording, drawMode }) {
   );
 }
 
-function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
-  const [title,     setTitle]     = useState(initial.title     || '');
-  const [content,   setContent]   = useState(initial.content   || '');
-  const [eventId,   setEventId]   = useState(initial.event_id  || '');
+// ── TEXT + VOICE AREA ─────────────────────────────────────────────────────────
+
+function TextVoiceArea({ g, value, onChange, aiConfig }) {
   const [recording, setRecording] = useState(false);
-  const [drawMode,  setDrawMode]  = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError,   setAiError]   = useState('');
   const recRef   = useRef(null);
-  const finalRef = useRef(content);
+  const finalRef = useRef(value);
 
-  useEffect(() => { finalRef.current = content; }, [content]);
+  useEffect(() => { finalRef.current = value; }, [value]);
 
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -628,96 +589,222 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
         if (e.results[i].isFinal) final += (final ? '\n' : '') + t;
         else interim = t;
       }
-      setContent(final + (interim ? ` [${interim}]` : ''));
+      onChange(final + (interim ? ` [${interim}]` : ''));
     };
-    rec.onend   = () => { setRecording(false); setContent(final); finalRef.current = final; };
+    rec.onend   = () => { setRecording(false); onChange(final); finalRef.current = final; };
     rec.onerror = (e) => { setAiError(`Mic: ${e.error}`); setRecording(false); };
     rec.start(); recRef.current = rec; setRecording(true);
   };
   const stopVoice = () => { recRef.current?.stop(); setRecording(false); };
 
   const cleanWithAI = async () => {
-    if (!content.trim()) return;
+    if (!value.trim()) return;
     setAiLoading(true); setAiError('');
     try {
-      const result = await callAI('chat', content,
+      const result = await callAI('chat', value,
         'You are a meeting notes assistant. Clean up and structure the following raw notes. Fix grammar, remove filler words, organise into clear bullet points with headings. Keep it concise. Return only the cleaned notes, no preamble.',
         aiConfig || DEFAULT_AI_CONFIG);
-      setContent(result.trim());
+      onChange(result.trim());
     } catch { setAiError('AI unavailable — notes saved as-is.'); }
     finally { setAiLoading(false); }
   };
 
-  const workEvents = events.filter(e => !e.is_completed);
+  const linesBg = `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}55 28px)`;
 
   return (
-    <Modal title={initial.id ? 'Edit Note' : 'New Note'} g={g} onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Mic toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+        background: recording ? `${g.urgentBar}10` : `${g.card}10`,
+        borderBottom: `1px solid ${g.surfaceBorder}`,
+        flexShrink: 0, transition: 'background .2s',
+      }}>
+        <button onClick={recording ? stopVoice : startVoice} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: recording ? g.urgentBar : g.card,
+          border: 'none', borderRadius: 8, padding: '6px 14px',
+          color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          transition: 'all .15s',
+        }}>
+          🎤 {recording ? 'Stop' : 'Dictate'}
+        </button>
 
-        <Input g={g} placeholder="Note title *" value={title}
-          onChange={e => setTitle(e.target.value)} autoFocus />
+        {recording && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2 }}>
+            {[12,18,10,16,8,14].map((h,i) => (
+              <div key={i} style={{
+                width: 3, borderRadius: 2, background: g.urgentBar,
+                height: h, opacity: 0.7,
+              }} />
+            ))}
+            <span style={{ fontSize: 11, color: g.urgentBar, marginLeft: 4 }}>Listening…</span>
+          </div>
+        )}
 
-        <Select g={g} value={eventId} onChange={e => setEventId(e.target.value)}>
-          <option value="">— Standalone note —</option>
-          {workEvents.map(ev => (
-            <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
-          ))}
-        </Select>
-
-        <NoteSurface
-          g={g} value={content} onChange={setContent}
-          recording={recording} drawMode={drawMode} onDrawModeChange={setDrawMode}
-        />
-
-        {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={() => setDrawMode(v => !v)} style={{
-            background: drawMode ? `${g.card}20` : 'transparent',
-            border: `1.5px solid ${drawMode ? g.card : g.surfaceBorder}`,
-            borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
-            fontSize: 13, color: drawMode ? g.card : g.muted, fontWeight: 600,
-          }}>✏️ {drawMode ? 'Drawing' : 'Draw'}</button>
-
-          <button onClick={recording ? stopVoice : startVoice} style={{
-            background: recording ? g.urgentBar : 'transparent',
-            border: `1.5px solid ${recording ? g.urgentBar : g.surfaceBorder}`,
-            borderRadius: 8, padding: '6px 12px', cursor: 'pointer',
-            fontSize: 13, color: recording ? '#fff' : g.muted, fontWeight: 600,
-            transition: 'all .15s',
-          }}>🎤 {recording ? 'Stop' : 'Voice'}</button>
-
-          {recording && (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2 }}>
-              {[10,14,8,12,9].map((h,i) => (
-                <div key={i} style={{ width: 3, height: h, background: g.urgentBar,
-                  borderRadius: 2, opacity: 0.75 }} />
-              ))}
-            </div>
-          )}
-
-          {content.trim().length > 20 && !recording && (
-            <button onClick={cleanWithAI} disabled={aiLoading} style={{
-              marginLeft: 'auto',
-              background: `${g.card}14`, border: `1.5px solid ${g.surfaceBorder}`,
-              borderRadius: 8, padding: '6px 12px', cursor: aiLoading ? 'wait' : 'pointer',
-              fontSize: 12, color: g.card, fontWeight: 600,
-            }}>{aiLoading ? '⏳ Cleaning…' : '✨ AI Clean'}</button>
-          )}
-        </div>
-
-        {aiError && <Text size={11} style={{ color: g.urgentBar }}>{aiError}</Text>}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn g={g} size="lg" style={{ flex: 1 }}
-            onClick={() => { if (title.trim()) onSave({ ...initial, title, content, event_id: eventId || null, tab: 'work' }); }}>
-            {initial.id ? 'Save Changes' : '💾 Save Note'}
-          </Btn>
-          <Btn g={g} variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
-        </div>
+        {value.trim().length > 20 && !recording && (
+          <button onClick={cleanWithAI} disabled={aiLoading} style={{
+            marginLeft: 'auto',
+            background: `${g.card}14`, border: `1.5px solid ${g.surfaceBorder}`,
+            borderRadius: 8, padding: '5px 12px', cursor: aiLoading ? 'wait' : 'pointer',
+            fontSize: 12, color: g.card, fontWeight: 600,
+          }}>{aiLoading ? '⏳ Cleaning…' : '✨ AI Clean'}</button>
+        )}
       </div>
-    </Modal>
+
+      {/* Text area — scrolls freely */}
+      <div style={{
+        flex: 1, position: 'relative',
+        background: 'rgba(255,255,255,0.96)',
+        backgroundImage: linesBg,
+        backgroundSize: '100% 28px',
+        backgroundPositionY: '4px',
+      }}>
+        {!value && (
+          <div style={{
+            position: 'absolute', top: 12, left: 14, pointerEvents: 'none',
+            color: g.muted, fontSize: 13, lineHeight: '28px', userSelect: 'none',
+          }}>
+            {recording ? 'Listening… speak now' : 'Type, paste or dictate your notes…'}
+          </div>
+        )}
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{
+            display: 'block', width: '100%', height: '100%', minHeight: 300,
+            padding: '12px 14px', boxSizing: 'border-box',
+            border: 'none', outline: 'none', resize: 'none',
+            fontFamily: 'inherit', fontSize: 13, lineHeight: '28px',
+            background: 'transparent', color: g.text,
+          }}
+        />
+      </div>
+
+      {aiError && (
+        <div style={{ padding: '4px 12px', background: `${g.urgentBar}10` }}>
+          <Text size={11} style={{ color: g.urgentBar }}>{aiError}</Text>
+        </div>
+      )}
+    </div>
   );
 }
+
+// ── NOTE MODAL ────────────────────────────────────────────────────────────────
+
+function NoteModal({ g, initial = {}, events, onSave, onClose, aiConfig }) {
+  const [title,   setTitle]   = useState(initial.title    || '');
+  const [content, setContent] = useState(initial.content  || '');
+  const [eventId, setEventId] = useState(initial.event_id || '');
+  const [mode,    setMode]    = useState('text'); // 'text' | 'draw'
+  const canvasRef = useRef(null);
+
+  const workEvents = events.filter(e => !e.is_completed);
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    const drawDataUrl = canvasRef.current?.toDataURL?.() || null;
+    onSave({ ...initial, title, content, draw_data: drawDataUrl, event_id: eventId || null, tab: 'work' });
+  };
+
+  return (
+    // Full-screen modal override
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.45)',
+      display: 'flex', alignItems: 'stretch', justifyContent: 'center',
+      padding: 0,
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        width: '100%', maxWidth: 680,
+        background: g.pageBg || '#f0f4ff',
+        borderRadius: 0,
+        overflow: 'hidden',
+        margin: 0,
+      }}>
+
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px',
+          background: g.card,
+          flexShrink: 0,
+        }}>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+            padding: '4px 10px', color: '#fff', fontSize: 18, cursor: 'pointer',
+          }}>←</button>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Note title…"
+            autoFocus
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              color: '#fff', fontSize: 16, fontWeight: 700,
+              fontFamily: 'inherit',
+            }}
+          />
+          <button onClick={handleSave} style={{
+            background: 'rgba(255,255,255,0.25)', border: 'none', borderRadius: 8,
+            padding: '6px 14px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          }}>Save</button>
+        </div>
+
+        {/* Link to event + mode switcher */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 16px',
+          background: `${g.card}18`,
+          borderBottom: `1px solid ${g.surfaceBorder}`,
+          flexShrink: 0, flexWrap: 'wrap',
+        }}>
+          <select value={eventId} onChange={e => setEventId(e.target.value)} style={{
+            flex: 1, minWidth: 0, fontSize: 12, padding: '4px 8px',
+            border: `1px solid ${g.surfaceBorder}`, borderRadius: 8,
+            background: 'white', color: g.text, fontFamily: 'inherit',
+          }}>
+            <option value="">— Standalone note —</option>
+            {workEvents.map(ev => (
+              <option key={ev.id} value={ev.id}>{ev.title} · {formatDate(ev.date)}</option>
+            ))}
+          </select>
+
+          {/* Mode tabs */}
+          <div style={{
+            display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden',
+            border: `1px solid ${g.surfaceBorder}`, flexShrink: 0,
+          }}>
+            {[
+              { id: 'text', label: '📝 Text & Voice' },
+              { id: 'draw', label: '✏️ Draw' },
+            ].map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)} style={{
+                padding: '5px 14px', border: 'none', cursor: 'pointer',
+                background: mode === m.id ? g.card : 'white',
+                color: mode === m.id ? '#fff' : g.muted,
+                fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+              }}>{m.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content area — fills remaining height */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          {mode === 'text' && (
+            <TextVoiceArea g={g} value={content} onChange={setContent} aiConfig={aiConfig} />
+          )}
+          {mode === 'draw' && (
+            <DrawCanvas g={g} canvasRef={canvasRef} />
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 
 
 // ── NOTES SECTION ─────────────────────────────────────────────────────────────
