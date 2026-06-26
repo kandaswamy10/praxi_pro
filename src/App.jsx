@@ -131,7 +131,7 @@ function AppInner() {
       case 'personal': return (
         <Personal
           g={g} userId={session.user.id}
-          triggerAddHabit={showAddHabit} onAddHabitDone={() => setShowAddHabit(false)}
+          triggerAdd={showAddHabit} onTriggerDone={() => setShowAddHabit(false)}
         />
       );
       default: return <PlaceholderView tabId={tab} g={g} />;
@@ -252,7 +252,7 @@ function AppInner() {
           ? <button onClick={() => setShowAddHabit(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
-              fontSize: 15, fontWeight: 700 }}>＋ Add Habit</button>
+              fontSize: 15, fontWeight: 700 }}>＋ Add</button>
           : <button onClick={() => setShowAddEvent(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
