@@ -136,6 +136,7 @@ export default function Dashboard({ events, goals, g, userName, onNavigate, onQu
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
           {[
             { icon: '💼', label: 'Go to Work',  action: () => onNavigate?.('work'),    tab: 'work'     },
+            { icon: '📅', label: 'Add Event',   action: () => onQuickAdd?.('event'),   tab: 'work'     },
             { icon: '📚', label: 'Learning',    action: () => onNavigate?.('learning'),tab: 'learning' },
             { icon: '🎯', label: 'Add Goal',    action: () => onQuickAdd?.('goal'),    tab: 'learning' },
             { icon: '🌟', label: 'Personal',    action: () => onNavigate?.('personal'),tab: 'personal' },
