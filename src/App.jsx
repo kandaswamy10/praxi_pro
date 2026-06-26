@@ -246,6 +246,8 @@ function AppInner() {
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
               fontSize: 15, fontWeight: 700 }}>＋ Add</button>
+          : tab === 'dashboard'
+          ? null
           : <button onClick={() => setShowAddEvent(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
