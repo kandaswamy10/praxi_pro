@@ -1,5 +1,5 @@
 // src/views/Learning.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Text, SectionLabel, Surface, GemCard, Btn, Input, Textarea,
   Select, Modal, Tag, ProgressBar,
