@@ -785,7 +785,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
         display: 'flex', flexDirection: 'column',
         width: '100%', maxWidth: 680,
         background: g.pageBg || '#f0f4ff',
-        overflow: 'hidden',
+        overflow: 'visible',
       }}>
 
         {/* ── Header ── */}
@@ -885,7 +885,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
         </div>
 
         {/* ── Content ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'visible' }}>
           {mode === 'text' && (
             editing
               ? <TextVoiceArea g={g} value={content} onChange={setContent} aiConfig={aiConfig} />
