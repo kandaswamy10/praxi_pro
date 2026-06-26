@@ -515,7 +515,7 @@ export default function Personal({ g, userId, triggerAdd, onTriggerDone }) {
       else { setTab('habits'); setShowAddHabit(true); }
       onTriggerDone?.();
     }
-  }, [triggerAddHabit]);
+  }, [triggerAdd]);
 
   const addHabit = ({ name, emoji }) => {
     persist({ ...data, habits: [...data.habits, { id: uid(), name, emoji, createdAt: TODAY() }] });
