@@ -440,41 +440,84 @@ function StatsStrip({ events, g }) {
 // ── DRAW CANVAS ──────────────────────────────────────────────────────────────
 // Fixed 1400px tall canvas inside a scrollable container — bitmap never resizes.
 
-function DrawCanvas({ g, canvasRef }) {
-  const isDrawing = useRef(false);
-  const lastPt    = useRef(null);
-  const ctxRef    = useRef(null);
+// ── DRAW CANVAS ──────────────────────────────────────────────────────────────
+// - Restores saved draw_data on open
+// - Auto-extends height when drawing within 200px of bottom (infinite scroll)
+// - Exports full bitmap via canvasRef.current.toDataURL()
+
+const PAGE_H = 1200; // initial height, grows automatically
+
+function DrawCanvas({ g, canvasRef, initialDataUrl }) {
+  const isDrawing  = useRef(false);
+  const lastPt     = useRef(null);
+  const ctxRef     = useRef(null);
+  const scrollRef  = useRef(null);
   const [penColor, setPenColor] = useState('#1a1a2e');
   const [penSize,  setPenSize]  = useState(2.5);
-  const CANVAS_H = 1400;
+  const [erasing,  setErasing]  = useState(false);
+  const [canvasH,  setCanvasH]  = useState(PAGE_H);
 
+  // Init canvas + restore saved image
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    canvas.width  = Math.round(rect.width) || 600;
-    canvas.height = CANVAS_H;
+    const w = Math.round(rect.width) || 600;
+    canvas.width  = w;
+    canvas.height = canvasH;
     const ctx = canvas.getContext('2d');
     ctx.strokeStyle = penColor;
     ctx.lineWidth   = penSize;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
     ctxRef.current  = ctx;
-  }, []);
 
+    if (initialDataUrl) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = initialDataUrl;
+    }
+  }, []); // run once on mount
+
+  // Sync pen settings
   useEffect(() => {
     if (!ctxRef.current) return;
-    ctxRef.current.strokeStyle = penColor;
-    ctxRef.current.lineWidth   = penSize;
-  }, [penColor, penSize]);
+    ctxRef.current.strokeStyle = erasing ? '#ffffff' : penColor;
+    ctxRef.current.lineWidth   = erasing ? 18 : penSize;
+  }, [penColor, penSize, erasing]);
 
+  // Extend canvas height preserving existing content
+  const extendCanvas = (newH) => {
+    const canvas = canvasRef.current;
+    if (!canvas || newH <= canvas.height) return;
+    // Save bitmap
+    const tmp = document.createElement('canvas');
+    tmp.width  = canvas.width;
+    tmp.height = canvas.height;
+    tmp.getContext('2d').drawImage(canvas, 0, 0);
+    // Resize
+    canvas.height = newH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(tmp, 0, 0);
+    ctx.strokeStyle = erasing ? '#ffffff' : penColor;
+    ctx.lineWidth   = erasing ? 18 : penSize;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctxRef.current  = ctx;
+    setCanvasH(newH);
+  };
+
+  // Pointer events
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const getPos = (e) => {
       const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+      return { x: (e.clientX - r.left) * (canvas.width / r.width),
+               y: (e.clientY - r.top)  * (canvas.height / r.height) };
     };
+
     const onDown = (e) => {
       e.preventDefault();
       isDrawing.current = true;
@@ -482,17 +525,29 @@ function DrawCanvas({ g, canvasRef }) {
       ctxRef.current?.beginPath();
       ctxRef.current?.moveTo(lastPt.current.x, lastPt.current.y);
     };
+
     const onMove = (e) => {
       if (!isDrawing.current) return;
       e.preventDefault();
       const pt = getPos(e);
       ctxRef.current?.lineTo(pt.x, pt.y);
       ctxRef.current?.stroke();
+      ctxRef.current?.beginPath();
+      ctxRef.current?.moveTo(pt.x, pt.y);
       lastPt.current = pt;
+
+      // Auto-extend when within 200px of bottom
+      const r = canvas.getBoundingClientRect();
+      const yAbs = e.clientY - r.top + (scrollRef.current?.scrollTop || 0);
+      if (yAbs > canvas.height - 200) {
+        extendCanvas(canvas.height + PAGE_H);
+      }
     };
+
     const onUp = () => { isDrawing.current = false; };
-    canvas.addEventListener('pointerdown',  onDown);
-    canvas.addEventListener('pointermove',  onMove);
+
+    canvas.addEventListener('pointerdown',  onDown, { passive: false });
+    canvas.addEventListener('pointermove',  onMove, { passive: false });
     canvas.addEventListener('pointerup',    onUp);
     canvas.addEventListener('pointerleave', onUp);
     return () => {
@@ -501,49 +556,64 @@ function DrawCanvas({ g, canvasRef }) {
       canvas.removeEventListener('pointerup',    onUp);
       canvas.removeEventListener('pointerleave', onUp);
     };
-  }, [penColor, penSize]);
+  }, [penColor, penSize, erasing, canvasH]);
 
   const clearCanvas = () => {
     const c = canvasRef.current;
     if (c && ctxRef.current) ctxRef.current.clearRect(0, 0, c.width, c.height);
   };
 
-  const linesBg = `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}55 28px)`;
+  const linesBg = `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}44 28px)`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Toolbar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-        background: `${g.card}10`, borderBottom: `1px solid ${g.surfaceBorder}`,
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', flexWrap: 'wrap',
+        background: `${g.card}10`, borderBottom: `1px solid ${g.surfaceBorder}`, flexShrink: 0,
       }}>
+        {/* Pen / Eraser toggle */}
+        <button onClick={() => setErasing(false)} title="Pen" style={{
+          padding: '4px 10px', borderRadius: 6, fontSize: 13, border: 'none', cursor: 'pointer',
+          background: !erasing ? g.card : 'white', color: !erasing ? '#fff' : g.muted, fontFamily: 'inherit',
+        }}>✏️</button>
+        <button onClick={() => setErasing(true)} title="Eraser" style={{
+          padding: '4px 10px', borderRadius: 6, fontSize: 13, border: 'none', cursor: 'pointer',
+          background: erasing ? g.card : 'white', color: erasing ? '#fff' : g.muted, fontFamily: 'inherit',
+        }}>⬜</button>
+
+        {/* Colors */}
+        <div style={{ width: 1, height: 20, background: g.surfaceBorder, margin: '0 2px' }} />
         {['#1a1a2e','#e74c3c','#2980b9','#27ae60','#8e44ad','#f39c12'].map(c => (
-          <button key={c} onClick={() => setPenColor(c)} style={{
-            width: 20, height: 20, borderRadius: '50%', background: c,
-            border: 'none', cursor: 'pointer', flexShrink: 0,
-            outline: penColor === c ? `3px solid ${g.card}` : '2px solid transparent',
+          <button key={c} onClick={() => { setPenColor(c); setErasing(false); }} style={{
+            width: 20, height: 20, borderRadius: '50%', background: c, border: 'none',
+            cursor: 'pointer', flexShrink: 0,
+            outline: !erasing && penColor === c ? `3px solid ${g.card}` : '2px solid transparent',
             outlineOffset: 2,
           }} />
         ))}
+
+        {/* Size */}
+        <div style={{ width: 1, height: 20, background: g.surfaceBorder, margin: '0 2px' }} />
         <select value={penSize} onChange={e => setPenSize(Number(e.target.value))} style={{
           fontSize: 12, border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
-          padding: '3px 6px', background: 'white', color: g.text, marginLeft: 4,
+          padding: '3px 6px', background: 'white', color: g.text,
         }}>
           <option value={1}>Fine</option>
           <option value={2.5}>Normal</option>
           <option value={5}>Thick</option>
           <option value={10}>Marker</option>
         </select>
+
         <button onClick={clearCanvas} style={{
-          marginLeft: 'auto', fontSize: 12, padding: '4px 12px',
+          marginLeft: 'auto', fontSize: 12, padding: '4px 10px',
           border: `1px solid ${g.surfaceBorder}`, borderRadius: 6,
           background: 'white', color: g.muted, cursor: 'pointer',
         }}>Clear</button>
       </div>
 
-      {/* Scrollable canvas area */}
-      <div style={{
+      {/* Scrollable infinite canvas */}
+      <div ref={scrollRef} style={{
         flex: 1, overflowY: 'auto', overflowX: 'hidden',
         background: 'white',
         backgroundImage: linesBg,
@@ -553,11 +623,9 @@ function DrawCanvas({ g, canvasRef }) {
         <canvas
           ref={canvasRef}
           style={{
-            display: 'block',
-            width: '100%',
-            height: `${CANVAS_H}px`,
-            touchAction: 'none',
-            cursor: 'crosshair',
+            display: 'block', width: '100%',
+            height: `${canvasH}px`,
+            touchAction: 'none', cursor: erasing ? 'cell' : 'crosshair',
           }}
         />
       </div>
@@ -845,7 +913,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
                 </div>
           )}
           {mode === 'draw' && (
-            <DrawCanvas g={g} canvasRef={canvasRef} readonly={!editing} />
+            <DrawCanvas g={g} canvasRef={canvasRef} initialDataUrl={initial.draw_data || null} />
           )}
         </div>
 
