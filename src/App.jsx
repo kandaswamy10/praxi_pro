@@ -49,7 +49,6 @@ function AppInner() {
   const [activeTab, setActiveTab]       = useState(null);
   const [dismissedAds, setDismissedAds] = useState(new Set());
   const [showAvatar, setShowAvatar]     = useState(false);
-  const [voiceActive, setVoiceActive]   = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
   const [showAddHabit, setShowAddHabit] = useState(false);
@@ -83,17 +82,6 @@ function AppInner() {
   const ad     = ADS[tab];
   const showAd = ad && !dismissedAds.has(tab);
 
-  // ── Voice input ────────────────────────────────────────────────────────────
-  const startVoice = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert('Voice input not supported. Try Chrome.'); return; }
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.onresult = (e) => console.log('Voice:', e.results[0][0].transcript);
-    rec.onend = () => setVoiceActive(false);
-    rec.start();
-    setVoiceActive(true);
-  };
 
   // ── Content ────────────────────────────────────────────────────────────────
   const renderContent = () => {
@@ -103,7 +91,17 @@ function AppInner() {
       </div>
     );
     switch (tab) {
-      case 'dashboard': return <Dashboard events={data.events} goals={data.goals} g={g} userName={profile?.name} />;
+      case 'dashboard': return (
+        <Dashboard
+          events={data.events} goals={data.goals} g={g} userName={profile?.name}
+          onNavigate={(tabId) => setActiveTab(tabId)}
+          onQuickAdd={(type) => {
+            if (type === 'event')  { setActiveTab('work');     setShowAddEvent(true); }
+            if (type === 'goal')   { setActiveTab('learning'); setShowAddGoal(true);  }
+            if (type === 'habit')  { setActiveTab('personal'); setShowAddHabit(true); }
+          }}
+        />
+      );
       case 'learning':  return (
         <Learning
           goals={data.goals} topics={data.topics}
@@ -238,12 +236,7 @@ function AppInner() {
         background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)',
         borderTop: `1px solid ${g.surfaceBorder}`,
         padding: '10px 18px', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button onClick={startVoice} style={{
-          background: voiceActive ? g.card : 'rgba(255,255,255,0.9)',
-          border: `1px solid ${voiceActive ? g.card : g.surfaceBorder}`,
-          borderRadius: '50%', width: 42, height: 42, cursor: 'pointer', fontSize: 18,
-          flexShrink: 0 }}>🎤</button>
-        {tab === 'learning'
+{tab === 'learning'
           ? <button onClick={() => setShowAddGoal(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',

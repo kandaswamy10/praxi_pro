@@ -45,7 +45,7 @@ function computeScore(events, goals) {
 
 // ── COMPONENT ─────────────────────────────────────────────────────────────────
 
-export default function Dashboard({ events, goals, g, userName }) {
+export default function Dashboard({ events, goals, g, userName, onNavigate, onQuickAdd }) {
   const score = useMemo(() => computeScore(events, goals), [events, goals]);
 
   const today = new Date().toISOString().split('T')[0];
@@ -128,6 +128,40 @@ export default function Dashboard({ events, goals, g, userName }) {
             <br /><Text size={10} muted g={g}>{l}</Text>
           </Surface>
         ))}
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <SectionLabel g={g}>Quick Actions</SectionLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+          {[
+            { icon: '📅', label: 'Add Event',   action: () => onQuickAdd?.('event'),   tab: 'work'     },
+            { icon: '🎯', label: 'Add Goal',    action: () => onQuickAdd?.('goal'),    tab: 'learning' },
+            { icon: '🔁', label: 'Add Habit',   action: () => onQuickAdd?.('habit'),   tab: 'personal' },
+            { icon: '💼', label: 'Go to Work',  action: () => onNavigate?.('work'),    tab: 'work'     },
+            { icon: '📚', label: 'Learning',    action: () => onNavigate?.('learning'),tab: 'learning' },
+            { icon: '🌟', label: 'Personal',    action: () => onNavigate?.('personal'),tab: 'personal' },
+          ].map(item => {
+            const tg = GEMS[item.tab] || g;
+            return (
+              <button key={item.label} onClick={item.action} style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 14px', borderRadius: 14, cursor: 'pointer',
+                background: 'rgba(255,255,255,0.75)', border: `1.5px solid ${tg.surfaceBorder}`,
+                textAlign: 'left', fontFamily: 'system-ui', transition: 'all .15s',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = `${tg.card}14`}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.75)'}
+              >
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: `${tg.card}18`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  {item.icon}
+                </div>
+                <Text g={g} bold size={13}>{item.label}</Text>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Today's agenda */}
