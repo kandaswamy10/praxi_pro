@@ -6,6 +6,7 @@ import {
 } from '../components/ui';
 import { callAI, DEFAULT_AI_CONFIG } from '../ai/service';
 import { PROMPTS as prompts } from '../ai/service';
+import * as XLSX from 'xlsx';
 
 function uuid() {
   return crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36);
@@ -641,6 +642,170 @@ function CompletedGoals({ goals, topics, g, onReopen, onDelete }) {
   );
 }
 
+
+// ── XLS IMPORT MODAL ─────────────────────────────────────────────────────────
+// Expected columns (case-insensitive): goal, topic/title, url/link
+// Each row = one topic under a goal. Goals are auto-created if new.
+
+function XlsImportModal({ g, goals, onImport, onClose }) {
+  const [step,    setStep]    = useState('upload'); // upload | preview | importing | done
+  const [rows,    setRows]    = useState([]);
+  const [error,   setError]   = useState('');
+  const [progress, setProgress] = useState(0);
+  const fileRef = useRef(null);
+
+  const normalize = (s = '') => s.toString().trim().toLowerCase();
+
+  const parseFile = (file) => {
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb   = XLSX.read(e.target.result, { type: 'binary' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        if (!raw.length) { setError('Sheet is empty.'); return; }
+
+        // Detect columns
+        const keys   = Object.keys(raw[0]);
+        const getCol = (...names) => keys.find(k => names.includes(normalize(k)));
+        const goalCol  = getCol('goal', 'goal name', 'goalname');
+        const topicCol = getCol('topic', 'title', 'topic name', 'topicname', 'name');
+        const urlCol   = getCol('url', 'link', 'resource', 'resource url');
+
+        if (!goalCol)  { setError('No "Goal" column found. Add a column named Goal.'); return; }
+        if (!topicCol) { setError('No "Topic" or "Title" column found.'); return; }
+
+        const parsed = raw
+          .filter(r => r[topicCol]?.toString().trim())
+          .map(r => ({
+            goal:  r[goalCol]?.toString().trim()  || 'Imported Goals',
+            topic: r[topicCol]?.toString().trim(),
+            url:   urlCol ? r[urlCol]?.toString().trim() || '' : '',
+          }));
+
+        if (!parsed.length) { setError('No valid rows found (Topic column is empty).'); return; }
+        setRows(parsed);
+        setStep('preview');
+      } catch (err) {
+        setError('Could not parse file: ' + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const runImport = async () => {
+    setStep('importing');
+    let done = 0;
+    // Group by goal name
+    const byGoal = rows.reduce((acc, r) => { (acc[r.goal] = acc[r.goal] || []).push(r); return acc; }, {});
+    const total  = rows.length;
+
+    for (const [goalName, items] of Object.entries(byGoal)) {
+      await onImport(goalName, items, (n) => {
+        done += n;
+        setProgress(Math.round(done / total * 100));
+      });
+    }
+    setStep('done');
+  };
+
+  // Group preview by goal
+  const byGoal = rows.reduce((acc, r) => { (acc[r.goal] = acc[r.goal] || []).push(r); return acc; }, {});
+
+  return (
+    <Modal title="Import from Excel / CSV" g={g} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        {step === 'upload' && (
+          <>
+            <Surface g={g} style={{ padding: 16, textAlign: 'center', border: `2px dashed ${g.surfaceBorder}`, background: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+              onClick={() => fileRef.current?.click()}>
+              <div style={{ fontSize: 32, marginBottom: 6 }}>📂</div>
+              <Text g={g} bold size={14}>Click to choose file</Text>
+              <Text g={g} muted size={12} style={{ display: 'block', marginTop: 4 }}>.xlsx, .xls, or .csv</Text>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+                onChange={e => e.target.files[0] && parseFile(e.target.files[0])} />
+            </Surface>
+            <Surface g={g} style={{ padding: 12 }}>
+              <Text g={g} bold size={12} style={{ display: 'block', marginBottom: 6 }}>Expected columns</Text>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+                {[
+                  { col: 'Goal', req: true,  note: 'Groups topics' },
+                  { col: 'Topic', req: true,  note: 'Topic / title' },
+                  { col: 'URL',   req: false, note: 'Optional link' },
+                ].map(c => (
+                  <div key={c.col} style={{ padding: '6px 10px', borderRadius: 8, background: `${g.card}12`, textAlign: 'center' }}>
+                    <Text g={g} bold size={12}>{c.col}</Text>
+                    {c.req && <Text g={g} size={10} style={{ color: g.accent, display: 'block' }}>required</Text>}
+                    <Text g={g} muted size={10} style={{ display: 'block' }}>{c.note}</Text>
+                  </div>
+                ))}
+              </div>
+            </Surface>
+            {error && <Text g={g} size={12} style={{ color: '#c0392b', padding: '8px 12px', background: '#fff0f0', borderRadius: 8 }}>⚠️ {error}</Text>}
+          </>
+        )}
+
+        {step === 'preview' && (
+          <>
+            <Text g={g} bold size={13} style={{ display: 'block' }}>
+              {rows.length} topics across {Object.keys(byGoal).length} goals
+            </Text>
+            <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {Object.entries(byGoal).map(([goalName, items]) => {
+                const exists = goals.find(g => g.title?.toLowerCase() === goalName.toLowerCase());
+                return (
+                  <Surface key={goalName} g={g} style={{ padding: '10px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <Text g={g} bold size={13}>🎯 {goalName}</Text>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
+                        background: exists ? `${g.card}18` : `${g.accent}18`,
+                        color: exists ? g.muted : g.accent }}>
+                        {exists ? 'existing' : 'new goal'}
+                      </span>
+                    </div>
+                    {items.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3, paddingLeft: 8 }}>
+                        <Text g={g} muted size={11}>•</Text>
+                        <Text g={g} size={12} style={{ flex: 1 }}>{item.topic}</Text>
+                        {item.url && <Text g={g} muted size={10}>🔗</Text>}
+                      </div>
+                    ))}
+                  </Surface>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn g={g} size="lg" style={{ flex: 1 }} onClick={runImport}>Import {rows.length} topics</Btn>
+              <Btn g={g} variant="secondary" style={{ flex: 1 }} onClick={() => { setRows([]); setStep('upload'); }}>Re-upload</Btn>
+            </div>
+          </>
+        )}
+
+        {step === 'importing' && (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+            <Text g={g} bold size={14} style={{ display: 'block', marginBottom: 10 }}>Importing… {progress}%</Text>
+            <div style={{ height: 8, borderRadius: 99, background: `${g.card}18`, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: g.card, borderRadius: 99, width: `${progress}%`, transition: 'width .3s' }} />
+            </div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
+            <Text g={g} bold size={15} style={{ display: 'block', marginBottom: 4 }}>Import complete!</Text>
+            <Text g={g} muted size={13} style={{ display: 'block', marginBottom: 16 }}>{rows.length} topics added.</Text>
+            <Btn g={g} size="lg" onClick={onClose} style={{ minWidth: 120 }}>Done</Btn>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ── MAIN LEARNING VIEW ────────────────────────────────────────────────────────
 
 export default function Learning({
@@ -653,6 +818,7 @@ export default function Learning({
 }) {
   const [activeGoalId, setActiveGoalId] = useState(null);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
+  const [showImport,   setShowImport]   = useState(false);
 
   useEffect(() => {
     if (triggerAddGoal) { setShowAddGoal(true); onAddGoalDone?.(); }
@@ -681,6 +847,7 @@ export default function Learning({
           <Text size={26} bold g={g}>Learning </Text>
           <Text size={26} italic color={g.accent}>Goals.</Text>
         </div>
+        <Btn g={g} size="sm" onClick={() => setShowImport(true)}>📂 Import XLS</Btn>
       </div>
 
       {/* ── Overall progress strip ── */}
@@ -733,7 +900,26 @@ export default function Learning({
       />
 
       {/* Modals */}
-      {showAddGoal && <AddGoalModal g={g} onAdd={onAddGoal} onClose={() => setShowAddGoal(false)} />}
+      {showImport && (
+    <XlsImportModal
+      g={g} goals={goals}
+      onImport={async (goalName, items, onProgress) => {
+        // Find or create goal
+        let goal = goals.find(g => g.title?.toLowerCase() === goalName.toLowerCase());
+        if (!goal) {
+          goal = await onAddGoal({ title: goalName, description: 'Imported from XLS', target_hours: items.length * 2 });
+        }
+        if (!goal) return;
+        // Add topics one by one
+        for (const item of items) {
+          await onAddTopic(goal.id, { title: item.topic, url: item.url || null, is_completed: false });
+          onProgress(1);
+        }
+      }}
+      onClose={() => setShowImport(false)}
+    />
+  )}
+  {showAddGoal && <AddGoalModal g={g} onAdd={onAddGoal} onClose={() => setShowAddGoal(false)} />}
     </div>
   );
 }

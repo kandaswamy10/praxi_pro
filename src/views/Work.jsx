@@ -1021,11 +1021,7 @@ export default function Work({
             fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4,
           }}>{v.icon} {v.label}</button>
         ))}
-        <button onClick={() => setShowAdd(true)} style={{
-          marginLeft: 'auto', padding: '6px 14px', borderRadius: 999,
-          background: g.card, color: '#fff', border: 'none',
-          fontSize: 12, fontWeight: 700, cursor: 'pointer',
-        }}>＋ Add</button>
+
       </div>
 
       {/* Filter pills (timeline only) */}
