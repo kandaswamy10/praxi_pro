@@ -140,31 +140,35 @@ function QuizModal({ quiz, topicTitle, g, onClose }) {
       position: 'fixed', inset: 0, zIndex: 2000,
       background: g.pageBg || '#f0f4ff',
       display: 'flex', flexDirection: 'column',
+      height: '100dvh', overflow: 'hidden',   // never scroll outer
     }}>
-      {/* Header */}
+      {/* Header — fixed */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 18px', background: g.card, flexShrink: 0,
+        padding: '12px 16px', background: g.card, flexShrink: 0,
       }}>
         <button onClick={onClose} style={{
           background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
           padding: '6px 12px', color: '#fff', fontSize: 18, cursor: 'pointer',
         }}>&#8592;</button>
         <div style={{ flex: 1 }}>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Quiz</div>
-          <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12 }}>{topicTitle}</div>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Quiz</div>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+            {topicTitle}
+          </div>
         </div>
         {!done && (
           <div style={{
             background: 'rgba(255,255,255,0.2)', borderRadius: 999,
-            padding: '4px 14px', color: '#fff', fontSize: 13, fontWeight: 700,
+            padding: '4px 12px', color: '#fff', fontSize: 13, fontWeight: 700,
           }}>{idx + 1} / {quiz.length}</div>
         )}
       </div>
 
       {/* Progress bar */}
       {!done && (
-        <div style={{ height: 4, background: 'rgba(0,0,0,0.1)', flexShrink: 0 }}>
+        <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', flexShrink: 0 }}>
           <div style={{
             height: '100%', background: g.card,
             width: `${((idx + (chosen !== null ? 1 : 0)) / quiz.length) * 100}%`,
@@ -173,89 +177,109 @@ function QuizModal({ quiz, topicTitle, g, onClose }) {
         </div>
       )}
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 20px' }}>
+      {/* Body — flex, fills remaining space, no scroll */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        padding: '16px', gap: 12,
+        overflow: 'hidden', minHeight: 0,
+      }}>
         {done ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 16, paddingTop: 40 }}>
-            <div style={{ fontSize: 64 }}>{score === quiz.length ? '🏆' : score >= quiz.length * 0.7 ? '🎉' : '📚'}</div>
-            <div style={{ fontSize: 48, fontWeight: 800, color: g.card }}>
-              {score}<span style={{ fontSize: 24, color: g.muted }}>/{quiz.length}</span>
+          /* Results */
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 14, textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 56 }}>{score === quiz.length ? '🏆' : score >= quiz.length * 0.7 ? '🎉' : '📚'}</div>
+            <div style={{ fontSize: 44, fontWeight: 800, color: g.card, lineHeight: 1 }}>
+              {score}<span style={{ fontSize: 22, color: g.muted }}>/{quiz.length}</span>
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: g.text }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: g.text }}>
               {score === quiz.length ? 'Perfect score!' : score >= quiz.length * 0.7 ? 'Great job!' : 'Keep studying!'}
             </div>
-            <div style={{ fontSize: 15, color: g.muted }}>{Math.round(score / quiz.length * 100)}% correct</div>
+            <div style={{ fontSize: 14, color: g.muted }}>{Math.round(score / quiz.length * 100)}% correct</div>
             <button onClick={onClose} style={{
-              marginTop: 16, background: g.card, border: 'none', borderRadius: 999,
-              padding: '14px 48px', color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer',
+              marginTop: 8, background: g.card, border: 'none', borderRadius: 999,
+              padding: '14px 48px', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
             }}>Done</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600, margin: '0 auto' }}>
-            {/* Question card */}
+          <>
+            {/* Question — fixed size */}
             <div style={{
-              background: 'rgba(255,255,255,0.92)', borderRadius: 16,
-              padding: '22px 20px', border: `1.5px solid ${g.surfaceBorder}`,
+              background: 'rgba(255,255,255,0.92)', borderRadius: 14,
+              padding: '16px 16px', border: `1.5px solid ${g.surfaceBorder}`,
+              flexShrink: 0,
             }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: g.muted, marginBottom: 10,
+              <div style={{ fontSize: 10, fontWeight: 600, color: g.muted, marginBottom: 6,
                 textTransform: 'uppercase', letterSpacing: 1 }}>Question {idx + 1}</div>
-              <div style={{ fontSize: 19, fontWeight: 700, color: g.text, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: g.text, lineHeight: 1.45 }}>
                 {q.question}
               </div>
             </div>
 
-            {/* Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Options — equal flex distribution, no overflow */}
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column',
+              gap: 8, minHeight: 0,
+            }}>
               {q.options.map((opt, i) => {
                 const isCorrect = i === correctIdx, isPicked = i === chosen, revealed = chosen !== null;
-                const bg     = !revealed ? 'rgba(255,255,255,0.88)' : isCorrect ? `${g.okBar}28` : isPicked ? `${g.urgentBar}20` : 'rgba(255,255,255,0.6)';
+                const bg     = !revealed ? 'rgba(255,255,255,0.88)' : isCorrect ? `${g.okBar}28` : isPicked ? `${g.urgentBar}20` : 'rgba(255,255,255,0.55)';
                 const border = !revealed ? g.surfaceBorder : isCorrect ? g.okBar : isPicked ? g.urgentBar : g.surfaceBorder;
                 return (
                   <button key={i} onClick={() => answer(i)} style={{
+                    flex: 1,                              // equal height share
                     background: bg, border: `2px solid ${border}`,
-                    borderRadius: 14, padding: '16px 18px',
+                    borderRadius: 12,
+                    padding: '0 14px',
                     cursor: revealed ? 'default' : 'pointer',
-                    textAlign: 'left', fontSize: 16, color: g.text,
-                    fontFamily: 'inherit', lineHeight: 1.4,
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    transition: 'all .15s',
+                    textAlign: 'left', fontSize: 15, color: g.text,
+                    fontFamily: 'inherit', lineHeight: 1.3,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    transition: 'background .15s, border-color .15s',
+                    minHeight: 0, overflow: 'hidden',
                   }}>
                     <span style={{
-                      width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                       background: !revealed ? `${g.card}18` : isCorrect ? g.okBar : isPicked ? g.urgentBar : `${g.card}10`,
                       border: `2px solid ${!revealed ? g.surfaceBorder : isCorrect ? g.okBar : isPicked ? g.urgentBar : g.surfaceBorder}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 700,
+                      fontSize: 12, fontWeight: 700, flexShrink: 0,
                       color: revealed && (isCorrect || isPicked) ? '#fff' : g.muted,
                     }}>
                       {revealed && isCorrect ? '✓' : revealed && isPicked ? '✗' : ['A','B','C','D'][i]}
                     </span>
-                    {opt}
+                    <span style={{
+                      overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                    }}>{opt}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Explanation + Next */}
+            {/* Explanation + Next — pinned at bottom */}
             {chosen !== null && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {q.explanation && (
                   <div style={{
-                    background: `${g.card}12`, border: `1.5px solid ${g.surfaceBorder}`,
-                    borderRadius: 12, padding: '14px 16px',
-                    fontSize: 15, color: g.text, lineHeight: 1.6,
+                    background: `${g.card}10`, border: `1.5px solid ${g.surfaceBorder}`,
+                    borderRadius: 10, padding: '10px 14px',
+                    fontSize: 13, color: g.text, lineHeight: 1.5,
+                    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
                   }}>💡 {q.explanation}</div>
                 )}
                 <button onClick={next} style={{
                   background: g.card, border: 'none', borderRadius: 999,
-                  padding: '16px', color: '#fff', fontSize: 17, fontWeight: 700,
-                  cursor: 'pointer', width: '100%',
+                  padding: '14px', color: '#fff', fontSize: 16, fontWeight: 700,
+                  cursor: 'pointer', width: '100%', flexShrink: 0,
                 }}>
-                  {idx + 1 >= quiz.length ? 'See Results 🏁' : 'Next Question →'}
+                  {idx + 1 >= quiz.length ? 'See Results 🏁' : 'Next →'}
                 </button>
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -332,6 +356,24 @@ function ActiveGoalCard({
   const [aiLoading,    setAiLoading]    = useState(false);
   const [aiError,      setAiError]      = useState('');
   const [activeQuiz,   setActiveQuiz]   = useState(null);
+  const [quizReady,    setQuizReady]    = useState({}); // topicId → true when cached
+  const quizCache = useRef({});                          // topicId → quiz[]
+
+  // Pre-fetch quiz for a topic silently in background
+  const prefetchQuiz = async (topic) => {
+    if (quizCache.current[topic.id]) return; // already cached
+    try {
+      const raw = await callAI('quizGenerate',
+        `Topic: ${topic.title}\nGoal: ${goal.title}`,
+        'Generate 5 multiple-choice quiz questions for this learning topic. Return JSON array with fields: question, options (array of 4), correct (0-based index), explanation.',
+        aiConfig || DEFAULT_AI_CONFIG);
+      const quiz = parseJSON(raw);
+      if (quiz?.length) {
+        quizCache.current[topic.id] = quiz;
+        setQuizReady(prev => ({ ...prev, [topic.id]: true }));
+      }
+    } catch {} // silent — user can still tap Quiz to fetch live
+  };
 
   const goalTopics = topics.filter(t => t.goal_id === goal.id)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
@@ -361,12 +403,20 @@ function ActiveGoalCard({
       if (classified) {
         const merged = classified.map((c, i) => ({ ...(allTopics.find(t => t.id === c.id) || newTopic), ...c, sort_order: i }));
         await onReplaceTopics(goalId, merged);
+        // Pre-fetch quiz for the first incomplete topic after classification
+        const firstIncomplete = merged.find(t => !t.is_completed);
+        if (firstIncomplete) prefetchQuiz(firstIncomplete);
       }
     } catch (e) { setAiError(`AI: ${e.message}`); }
     finally { setAiLoading(false); }
   };
 
   const generateQuiz = async (topic) => {
+    // Instant open from cache if available
+    if (quizCache.current[topic.id]) {
+      setActiveQuiz({ quiz: quizCache.current[topic.id], topicTitle: topic.title });
+      return;
+    }
     setAiLoading(true); setAiError('');
     try {
       const raw = await callAI('quizGenerate',
@@ -374,7 +424,11 @@ function ActiveGoalCard({
         'Generate 5 multiple-choice quiz questions for this learning topic. Return JSON array with fields: question, options (array of 4), correct (0-based index), explanation.',
         aiConfig || DEFAULT_AI_CONFIG);
       const quiz = parseJSON(raw);
-      if (quiz) setActiveQuiz({ quiz, topicTitle: topic.title });
+      if (quiz?.length) {
+        quizCache.current[topic.id] = quiz;
+        setQuizReady(prev => ({ ...prev, [topic.id]: true }));
+        setActiveQuiz({ quiz, topicTitle: topic.title });
+      }
     } catch (e) { setAiError(`Quiz: ${e.message}`); }
     finally { setAiLoading(false); }
   };
@@ -452,7 +506,14 @@ function ActiveGoalCard({
                     borderRadius: 12, padding: '10px 14px', marginBottom: 8,
                     opacity: locked ? 0.4 : 1,
                   }}>
-                    <div onClick={() => !locked && !topic.is_completed && onCompleteTopic(topic.id, goal.id)}
+                    <div onClick={() => {
+                      if (!locked && !topic.is_completed) {
+                        onCompleteTopic(topic.id, goal.id);
+                        // Pre-fetch quiz for next incomplete topic
+                        const nextTopic = goalTopics.find(t => !t.is_completed && t.id !== topic.id);
+                        if (nextTopic) prefetchQuiz(nextTopic);
+                      }
+                    }}
                       style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, marginTop: 1,
                         background: topic.is_completed ? g.okBar : locked ? `${g.card}22` : `${g.card}18`,
                         border: `1.5px solid ${topic.is_completed ? g.okBar : g.card}`,
@@ -474,7 +535,9 @@ function ActiveGoalCard({
                     <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
                       {!topic.is_completed && !locked && (
                         <Btn size="sm" g={g} onClick={() => generateQuiz(topic)}
-                          style={{ opacity: aiLoading ? 0.4 : 1 }}>Quiz</Btn>
+                          style={{ opacity: aiLoading && !quizCache.current[topic.id] ? 0.4 : 1 }}>
+                          {quizReady[topic.id] ? '⚡ Quiz' : aiLoading ? '…' : 'Quiz'}
+                        </Btn>
                       )}
                       {topic.url && (
                         <a href={topic.url} target="_blank" rel="noreferrer" style={{
