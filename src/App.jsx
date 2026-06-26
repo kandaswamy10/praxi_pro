@@ -8,6 +8,7 @@ import Onboarding from './views/Onboarding.jsx';
 import Dashboard from './views/Dashboard.jsx';
 import Learning from './views/Learning.jsx';
 import Work from './views/Work.jsx';
+import Personal from './views/Personal.jsx';
 import { AlarmBanner, Surface, Text } from './components/ui.jsx';
 
 const ADS = {
@@ -51,6 +52,7 @@ function AppInner() {
   const [voiceActive, setVoiceActive]   = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
+  const [showAddHabit, setShowAddHabit] = useState(false);
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) return (
@@ -124,6 +126,12 @@ function AppInner() {
           onAddNote={data.addMeetingNote} onUpdateNote={data.updateMeetingNote} onDeleteNote={data.deleteMeetingNote}
           aiConfig={profile?.ai_config}
           triggerAddEvent={showAddEvent} onAddEventDone={() => setShowAddEvent(false)}
+        />
+      );
+      case 'personal': return (
+        <Personal
+          g={g} userId={session.user.id}
+          triggerAddHabit={showAddHabit} onAddHabitDone={() => setShowAddHabit(false)}
         />
       );
       default: return <PlaceholderView tabId={tab} g={g} />;
@@ -240,6 +248,11 @@ function AppInner() {
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
               fontSize: 15, fontWeight: 700 }}>＋ Add Goal</button>
+          : tab === 'personal'
+          ? <button onClick={() => setShowAddHabit(true)} style={{
+              background: g.card, border: 'none', borderRadius: 999,
+              flex: 1, height: 42, cursor: 'pointer', color: '#fff',
+              fontSize: 15, fontWeight: 700 }}>＋ Add Habit</button>
           : <button onClick={() => setShowAddEvent(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
