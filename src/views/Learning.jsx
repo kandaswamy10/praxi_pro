@@ -648,11 +648,12 @@ function CompletedGoals({ goals, topics, g, onReopen, onDelete }) {
 // Each row = one topic under a goal. Goals are auto-created if new.
 
 function XlsImportModal({ g, goals, onImport, onClose }) {
-  const [step,    setStep]    = useState('upload'); // upload | preview | importing | done
-  const [rows,    setRows]    = useState([]);
-  const [error,   setError]   = useState('');
+  const [selectedGoalId, setSelectedGoalId] = useState('');
+  const [newGoalName,    setNewGoalName]    = useState('');
+  const [rows,     setRows]     = useState([]); // [{url, title}]
+  const [error,    setError]    = useState('');
+  const [step,     setStep]     = useState('setup'); // setup | preview | importing | done
   const [progress, setProgress] = useState(0);
-  const fileRef = useRef(null);
 
   const normalize = (s = '') => s.toString().trim().toLowerCase();
 
@@ -661,31 +662,36 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb   = XLSX.read(e.target.result, { type: 'binary' });
-        const ws   = wb.Sheets[wb.SheetNames[0]];
-        const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const wb  = XLSX.read(e.target.result, { type: 'binary' });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
         if (!raw.length) { setError('Sheet is empty.'); return; }
 
-        // Detect columns
         const keys   = Object.keys(raw[0]);
-        const getCol = (...names) => keys.find(k => names.includes(normalize(k)));
-        const goalCol  = getCol('goal', 'goal name', 'goalname');
-        const topicCol = getCol('topic', 'title', 'topic name', 'topicname', 'name');
-        const urlCol   = getCol('url', 'link', 'resource', 'resource url');
-
-        if (!goalCol)  { setError('No "Goal" column found. Add a column named Goal.'); return; }
-        if (!topicCol) { setError('No "Topic" or "Title" column found.'); return; }
+        const urlCol = keys.find(k => ['url','link','resource','resource url'].includes(normalize(k)));
+        if (!urlCol) { setError('No URL/Link column found in file.'); return; }
 
         const parsed = raw
-          .filter(r => r[topicCol]?.toString().trim())
-          .map(r => ({
-            goal:  r[goalCol]?.toString().trim()  || 'Imported Goals',
-            topic: r[topicCol]?.toString().trim(),
-            url:   urlCol ? r[urlCol]?.toString().trim() || '' : '',
-          }));
+          .map(r => r[urlCol]?.toString().trim())
+          .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
 
-        if (!parsed.length) { setError('No valid rows found (Topic column is empty).'); return; }
-        setRows(parsed);
+        if (!parsed.length) { setError('No valid URLs found in file.'); return; }
+
+        // Derive title from URL: use last path segment, cleaned up
+        const titleFromUrl = (url) => {
+          try {
+            const u    = new URL(url);
+            const segs = u.pathname.split('/').filter(Boolean);
+            const last = segs[segs.length - 1] || u.hostname;
+            return last
+              .replace(/[-_]/g, ' ')
+              .replace(/\.[^.]+$/, '')      // strip extension
+              .replace(/\w/g, c => c.toUpperCase())
+              .trim() || u.hostname;
+          } catch { return url; }
+        };
+
+        setRows(parsed.map(url => ({ url, title: titleFromUrl(url) })));
         setStep('preview');
       } catch (err) {
         setError('Could not parse file: ' + err.message);
@@ -694,95 +700,125 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
     reader.readAsBinaryString(file);
   };
 
-  const runImport = async () => {
-    setStep('importing');
-    let done = 0;
-    // Group by goal name
-    const byGoal = rows.reduce((acc, r) => { (acc[r.goal] = acc[r.goal] || []).push(r); return acc; }, {});
-    const total  = rows.length;
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) parseFile(file);
+    e.target.value = ''; // reset so same file can be re-selected
+  };
 
-    for (const [goalName, items] of Object.entries(byGoal)) {
-      await onImport(goalName, items, (n) => {
-        done += n;
-        setProgress(Math.round(done / total * 100));
-      });
-    }
+  const runImport = async () => {
+    const goalName = selectedGoalId === '__new__' ? newGoalName.trim() : goals.find(g => g.id === selectedGoalId)?.title;
+    if (!goalName) return;
+    setStep('importing');
+    await onImport(goalName, selectedGoalId === '__new__' ? null : selectedGoalId, rows, (n) => {
+      setProgress(p => Math.min(p + Math.round(n / rows.length * 100), 99));
+    });
+    setProgress(100);
     setStep('done');
   };
 
-  // Group preview by goal
-  const byGoal = rows.reduce((acc, r) => { (acc[r.goal] = acc[r.goal] || []).push(r); return acc; }, {});
+  const goalOk = selectedGoalId && (selectedGoalId !== '__new__' || newGoalName.trim());
 
   return (
-    <Modal title="Import from Excel / CSV" g={g} onClose={onClose}>
+    <Modal title="Import Links from File" g={g} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {step === 'upload' && (
+        {/* ── SETUP step ── */}
+        {step === 'setup' && (
           <>
-            <Surface g={g} style={{ padding: 16, textAlign: 'center', border: `2px dashed ${g.surfaceBorder}`, background: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
-              onClick={() => fileRef.current?.click()}>
-              <div style={{ fontSize: 32, marginBottom: 6 }}>📂</div>
-              <Text g={g} bold size={14}>Click to choose file</Text>
-              <Text g={g} muted size={12} style={{ display: 'block', marginTop: 4 }}>.xlsx, .xls, or .csv</Text>
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
-                onChange={e => e.target.files[0] && parseFile(e.target.files[0])} />
-            </Surface>
-            <Surface g={g} style={{ padding: 12 }}>
-              <Text g={g} bold size={12} style={{ display: 'block', marginBottom: 6 }}>Expected columns</Text>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
-                {[
-                  { col: 'Goal', req: true,  note: 'Groups topics' },
-                  { col: 'Topic', req: true,  note: 'Topic / title' },
-                  { col: 'URL',   req: false, note: 'Optional link' },
-                ].map(c => (
-                  <div key={c.col} style={{ padding: '6px 10px', borderRadius: 8, background: `${g.card}12`, textAlign: 'center' }}>
-                    <Text g={g} bold size={12}>{c.col}</Text>
-                    {c.req && <Text g={g} size={10} style={{ color: g.accent, display: 'block' }}>required</Text>}
-                    <Text g={g} muted size={10} style={{ display: 'block' }}>{c.note}</Text>
-                  </div>
-                ))}
+            {/* Goal selector */}
+            <div>
+              <SectionLabel g={g}>Select Goal *</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* Existing goals */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                  {goals.map(goal => (
+                    <button key={goal.id} onClick={() => setSelectedGoalId(goal.id)} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
+                      borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'system-ui',
+                      border: `1.5px solid ${selectedGoalId === goal.id ? g.card : g.surfaceBorder}`,
+                      background: selectedGoalId === goal.id ? `${g.card}18` : 'rgba(255,255,255,0.7)',
+                    }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedGoalId === goal.id ? g.card : g.muted, flexShrink: 0 }} />
+                      <Text g={g} size={13}>{goal.title}</Text>
+                    </button>
+                  ))}
+                  <button onClick={() => setSelectedGoalId('__new__')} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
+                    borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'system-ui',
+                    border: `1.5px solid ${selectedGoalId === '__new__' ? g.card : g.surfaceBorder}`,
+                    background: selectedGoalId === '__new__' ? `${g.card}18` : 'rgba(255,255,255,0.7)',
+                  }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedGoalId === '__new__' ? g.card : g.muted, flexShrink: 0 }} />
+                    <Text g={g} size={13}>＋ Create new goal</Text>
+                  </button>
+                </div>
+                {selectedGoalId === '__new__' && (
+                  <Input g={g} placeholder="New goal name" value={newGoalName}
+                    onChange={e => setNewGoalName(e.target.value)} autoFocus />
+                )}
               </div>
-            </Surface>
-            {error && <Text g={g} size={12} style={{ color: '#c0392b', padding: '8px 12px', background: '#fff0f0', borderRadius: 8 }}>⚠️ {error}</Text>}
+            </div>
+
+            {/* File upload */}
+            <div>
+              <SectionLabel g={g}>Choose File *</SectionLabel>
+              <label style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 6, padding: '20px 16px', borderRadius: 12, cursor: 'pointer',
+                border: `2px dashed ${rows.length ? g.card : g.surfaceBorder}`,
+                background: rows.length ? `${g.card}08` : 'rgba(255,255,255,0.6)',
+              }}>
+                <div style={{ fontSize: 28 }}>{rows.length ? '✅' : '📂'}</div>
+                <Text g={g} bold size={13}>
+                  {rows.length ? `${rows.length} URLs loaded — click to re-select` : 'Click to choose .xlsx / .xls / .csv'}
+                </Text>
+                <Text g={g} muted size={11}>File must have a column named URL or Link</Text>
+                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
+              </label>
+            </div>
+
+            {error && (
+              <Text g={g} size={12} style={{ color: '#c0392b', padding: '8px 12px', background: '#fff0f0', borderRadius: 8 }}>
+                ⚠️ {error}
+              </Text>
+            )}
+
+            <Btn g={g} size="lg" onClick={() => setStep('preview')}
+              disabled={!goalOk || !rows.length}>
+              Preview {rows.length > 0 ? `${rows.length} topics` : ''}
+            </Btn>
           </>
         )}
 
+        {/* ── PREVIEW step ── */}
         {step === 'preview' && (
           <>
             <Text g={g} bold size={13} style={{ display: 'block' }}>
-              {rows.length} topics across {Object.keys(byGoal).length} goals
+              {rows.length} topics → {selectedGoalId === '__new__' ? newGoalName : goals.find(g => g.id === selectedGoalId)?.title}
             </Text>
-            <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {Object.entries(byGoal).map(([goalName, items]) => {
-                const exists = goals.find(g => g.title?.toLowerCase() === goalName.toLowerCase());
-                return (
-                  <Surface key={goalName} g={g} style={{ padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <Text g={g} bold size={13}>🎯 {goalName}</Text>
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
-                        background: exists ? `${g.card}18` : `${g.accent}18`,
-                        color: exists ? g.muted : g.accent }}>
-                        {exists ? 'existing' : 'new goal'}
-                      </span>
-                    </div>
-                    {items.map((item, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3, paddingLeft: 8 }}>
-                        <Text g={g} muted size={11}>•</Text>
-                        <Text g={g} size={12} style={{ flex: 1 }}>{item.topic}</Text>
-                        {item.url && <Text g={g} muted size={10}>🔗</Text>}
-                      </div>
-                    ))}
-                  </Surface>
-                );
-              })}
+            <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {rows.map((row, i) => (
+                <Surface key={i} g={g} style={{ padding: '8px 12px' }}>
+                  <Text g={g} bold size={12} style={{ display: 'block' }}>{row.title}</Text>
+                  <Text g={g} muted size={11} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    🔗 {row.url}
+                  </Text>
+                </Surface>
+              ))}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Btn g={g} size="lg" style={{ flex: 1 }} onClick={runImport}>Import {rows.length} topics</Btn>
-              <Btn g={g} variant="secondary" style={{ flex: 1 }} onClick={() => { setRows([]); setStep('upload'); }}>Re-upload</Btn>
+              <Btn g={g} size="lg" style={{ flex: 1 }} onClick={runImport}>
+                Import {rows.length} topics
+              </Btn>
+              <Btn g={g} variant="secondary" style={{ flex: 1 }} onClick={() => setStep('setup')}>
+                Back
+              </Btn>
             </div>
           </>
         )}
 
+        {/* ── IMPORTING step ── */}
         {step === 'importing' && (
           <div style={{ textAlign: 'center', padding: 24 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
@@ -793,6 +829,7 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
           </div>
         )}
 
+        {/* ── DONE step ── */}
         {step === 'done' && (
           <div style={{ textAlign: 'center', padding: 24 }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
@@ -903,16 +940,15 @@ export default function Learning({
       {showImport && (
     <XlsImportModal
       g={g} goals={goals}
-      onImport={async (goalName, items, onProgress) => {
+      onImport={async (goalName, goalId, rows, onProgress) => {
         // Find or create goal
-        let goal = goals.find(g => g.title?.toLowerCase() === goalName.toLowerCase());
+        let goal = goalId ? goals.find(g => g.id === goalId) : null;
         if (!goal) {
-          goal = await onAddGoal({ title: goalName, description: 'Imported from XLS', target_hours: items.length * 2 });
+          goal = await onAddGoal({ title: goalName, description: 'Imported from file', target_hours: rows.length * 2 });
         }
         if (!goal) return;
-        // Add topics one by one
-        for (const item of items) {
-          await onAddTopic(goal.id, { title: item.topic, url: item.url || null, is_completed: false });
+        for (const row of rows) {
+          await onAddTopic(goal.id, { title: row.title, url: row.url, is_completed: false });
           onProgress(1);
         }
       }}
