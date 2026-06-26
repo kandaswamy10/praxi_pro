@@ -115,18 +115,19 @@ function SkillTree({ topics, g }) {
 // ── QUIZ MODAL ────────────────────────────────────────────────────────────────
 
 function QuizModal({ quiz, topicTitle, g, onClose }) {
-  const [idx, setIdx]     = useState(0);
+  const [idx,    setIdx]    = useState(0);
   const [chosen, setChosen] = useState(null);
-  const [score, setScore]   = useState(0);
-  const [done, setDone]     = useState(false);
+  const [score,  setScore]  = useState(0);
+  const [done,   setDone]   = useState(false);
 
   if (!quiz?.length) return null;
   const q = quiz[idx];
+  const correctIdx = q?.correct ?? q?.correctIndex ?? 0;
 
   const answer = (i) => {
     if (chosen !== null) return;
     setChosen(i);
-    if (i === q.correct) setScore(s => s + 1);
+    if (i === correctIdx) setScore(s => s + 1);
   };
 
   const next = () => {
@@ -135,43 +136,129 @@ function QuizModal({ quiz, topicTitle, g, onClose }) {
   };
 
   return (
-    <Modal title={`Quiz: ${topicTitle}`} g={g} onClose={onClose}>
-      {done ? (
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>{score >= quiz.length * 0.7 ? '🎉' : '📚'}</div>
-          <Text size={20} bold g={g}>{score}/{quiz.length}</Text>
-          <Text size={13} muted g={g} style={{ display: 'block', marginTop: 6 }}>
-            {score === quiz.length ? 'Perfect score!' : score >= quiz.length * 0.7 ? 'Great job!' : 'Keep studying!'}
-          </Text>
-          <Btn g={g} onClick={onClose} style={{ marginTop: 16 }}>Done</Btn>
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 2000,
+      background: g.pageBg || '#f0f4ff',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 18px', background: g.card, flexShrink: 0,
+      }}>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
+          padding: '6px 12px', color: '#fff', fontSize: 18, cursor: 'pointer',
+        }}>&#8592;</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Quiz</div>
+          <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12 }}>{topicTitle}</div>
         </div>
-      ) : (
-        <div>
-          <Text size={11} muted g={g}>{idx + 1} / {quiz.length}</Text>
-          <Text size={14} bold g={g} style={{ display: 'block', margin: '10px 0 14px' }}>{q.question}</Text>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {q.options.map((opt, i) => {
-              const isCorrect = i === q.correct, isPicked = i === chosen;
-              const bg = chosen === null ? 'rgba(255,255,255,0.8)'
-                : isCorrect ? `${g.okBar}22` : isPicked ? `${g.urgentBar}18` : 'rgba(255,255,255,0.7)';
-              return (
-                <button key={i} onClick={() => answer(i)} style={{
-                  background: bg, border: `1.5px solid ${chosen !== null && isCorrect ? g.okBar : g.surfaceBorder}`,
-                  borderRadius: 10, padding: '10px 14px', cursor: chosen !== null ? 'default' : 'pointer',
-                  textAlign: 'left', fontSize: 13, color: g.text, fontFamily: 'inherit',
-                }}>{opt}</button>
-              );
-            })}
-          </div>
-          {chosen !== null && (
-            <div style={{ marginTop: 12 }}>
-              {q.explanation && <Text size={12} muted g={g} style={{ display: 'block', marginBottom: 8 }}>{q.explanation}</Text>}
-              <Btn g={g} onClick={next} style={{ width: '100%' }}>{idx + 1 >= quiz.length ? 'See Results' : 'Next →'}</Btn>
-            </div>
-          )}
+        {!done && (
+          <div style={{
+            background: 'rgba(255,255,255,0.2)', borderRadius: 999,
+            padding: '4px 14px', color: '#fff', fontSize: 13, fontWeight: 700,
+          }}>{idx + 1} / {quiz.length}</div>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      {!done && (
+        <div style={{ height: 4, background: 'rgba(0,0,0,0.1)', flexShrink: 0 }}>
+          <div style={{
+            height: '100%', background: g.card,
+            width: `${((idx + (chosen !== null ? 1 : 0)) / quiz.length) * 100}%`,
+            transition: 'width .3s ease',
+          }} />
         </div>
       )}
-    </Modal>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 20px' }}>
+        {done ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 16, paddingTop: 40 }}>
+            <div style={{ fontSize: 64 }}>{score === quiz.length ? '🏆' : score >= quiz.length * 0.7 ? '🎉' : '📚'}</div>
+            <div style={{ fontSize: 48, fontWeight: 800, color: g.card }}>
+              {score}<span style={{ fontSize: 24, color: g.muted }}>/{quiz.length}</span>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: g.text }}>
+              {score === quiz.length ? 'Perfect score!' : score >= quiz.length * 0.7 ? 'Great job!' : 'Keep studying!'}
+            </div>
+            <div style={{ fontSize: 15, color: g.muted }}>{Math.round(score / quiz.length * 100)}% correct</div>
+            <button onClick={onClose} style={{
+              marginTop: 16, background: g.card, border: 'none', borderRadius: 999,
+              padding: '14px 48px', color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer',
+            }}>Done</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600, margin: '0 auto' }}>
+            {/* Question card */}
+            <div style={{
+              background: 'rgba(255,255,255,0.92)', borderRadius: 16,
+              padding: '22px 20px', border: `1.5px solid ${g.surfaceBorder}`,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: g.muted, marginBottom: 10,
+                textTransform: 'uppercase', letterSpacing: 1 }}>Question {idx + 1}</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: g.text, lineHeight: 1.5 }}>
+                {q.question}
+              </div>
+            </div>
+
+            {/* Options */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {q.options.map((opt, i) => {
+                const isCorrect = i === correctIdx, isPicked = i === chosen, revealed = chosen !== null;
+                const bg     = !revealed ? 'rgba(255,255,255,0.88)' : isCorrect ? `${g.okBar}28` : isPicked ? `${g.urgentBar}20` : 'rgba(255,255,255,0.6)';
+                const border = !revealed ? g.surfaceBorder : isCorrect ? g.okBar : isPicked ? g.urgentBar : g.surfaceBorder;
+                return (
+                  <button key={i} onClick={() => answer(i)} style={{
+                    background: bg, border: `2px solid ${border}`,
+                    borderRadius: 14, padding: '16px 18px',
+                    cursor: revealed ? 'default' : 'pointer',
+                    textAlign: 'left', fontSize: 16, color: g.text,
+                    fontFamily: 'inherit', lineHeight: 1.4,
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    transition: 'all .15s',
+                  }}>
+                    <span style={{
+                      width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                      background: !revealed ? `${g.card}18` : isCorrect ? g.okBar : isPicked ? g.urgentBar : `${g.card}10`,
+                      border: `2px solid ${!revealed ? g.surfaceBorder : isCorrect ? g.okBar : isPicked ? g.urgentBar : g.surfaceBorder}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, fontWeight: 700,
+                      color: revealed && (isCorrect || isPicked) ? '#fff' : g.muted,
+                    }}>
+                      {revealed && isCorrect ? '✓' : revealed && isPicked ? '✗' : ['A','B','C','D'][i]}
+                    </span>
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Explanation + Next */}
+            {chosen !== null && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {q.explanation && (
+                  <div style={{
+                    background: `${g.card}12`, border: `1.5px solid ${g.surfaceBorder}`,
+                    borderRadius: 12, padding: '14px 16px',
+                    fontSize: 15, color: g.text, lineHeight: 1.6,
+                  }}>💡 {q.explanation}</div>
+                )}
+                <button onClick={next} style={{
+                  background: g.card, border: 'none', borderRadius: 999,
+                  padding: '16px', color: '#fff', fontSize: 17, fontWeight: 700,
+                  cursor: 'pointer', width: '100%',
+                }}>
+                  {idx + 1 >= quiz.length ? 'See Results 🏁' : 'Next Question →'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
