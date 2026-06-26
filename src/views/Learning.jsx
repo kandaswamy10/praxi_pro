@@ -345,19 +345,24 @@ function AddTopicModal({ goalId, g, onAdd, onClose }) {
 // ── ACTIVE GOAL CARD ──────────────────────────────────────────────────────────
 
 function ActiveGoalCard({
-  goal, topics, linkGroups, links, g, aiConfig,
+  goal, topics, g, aiConfig,
   isActive, onToggle,
-  onLogHours, onDeleteGoal, onCompleteGoal,
+  onCompleteGoal,
   onAddTopic, onCompleteTopic, onReplaceTopics,
-  onAddLink, onDeleteLink,
 }) {
   const [treeView,     setTreeView]     = useState(false);
   const [showAddTopic, setShowAddTopic] = useState(false);
   const [aiLoading,    setAiLoading]    = useState(false);
+  const [quizLoading,  setQuizLoading]  = useState(false);
   const [aiError,      setAiError]      = useState('');
   const [activeQuiz,   setActiveQuiz]   = useState(null);
-  const [quizReady,    setQuizReady]    = useState({}); // topicId → true when cached
-  const quizCache = useRef({});                          // topicId → quiz[]
+  const [quizReady,    setQuizReady]    = useState({});
+  const quizCache  = useRef({});
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Pre-fetch quiz silently — never touches aiLoading, never blocks UI
   const prefetchQuiz = async (topic) => {
@@ -711,8 +716,6 @@ export default function Learning({
           aiConfig={aiConfig}
           isActive={activeGoalId === goal.id}
           onToggle={(id) => setActiveGoalId(prev => prev === id ? null : id)}
-          onLogHours={onLogHours}
-          onDeleteGoal={onDeleteGoal}
           onCompleteGoal={onCompleteGoal}
           onAddTopic={onAddTopic}
           onCompleteTopic={onCompleteTopic}
