@@ -649,11 +649,12 @@ function CompletedGoals({ goals, topics, g, onReopen, onDelete }) {
 
 function XlsImportModal({ g, goals, onImport, onClose }) {
   const [selectedGoalId, setSelectedGoalId] = useState('');
-  const [newGoalName,    setNewGoalName]    = useState('');
+  const [newGoal, setNewGoal] = useState({ title: '', category: 'Technical', target_hours: 20, due_date: '', tags: '' });
   const [rows,     setRows]     = useState([]); // [{url, title}]
   const [error,    setError]    = useState('');
   const [step,     setStep]     = useState('setup'); // setup | preview | importing | done
   const [progress, setProgress] = useState(0);
+  const setNG = (k, v) => setNewGoal(f => ({ ...f, [k]: v }));
 
   const normalize = (s = '') => s.toString().trim().toLowerCase();
 
@@ -707,17 +708,17 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
   };
 
   const runImport = async () => {
-    const goalName = selectedGoalId === '__new__' ? newGoalName.trim() : goals.find(g => g.id === selectedGoalId)?.title;
+    const goalName = selectedGoalId === '__new__' ? newGoal.title.trim() : goals.find(g => g.id === selectedGoalId)?.title;
     if (!goalName) return;
     setStep('importing');
-    await onImport(goalName, selectedGoalId === '__new__' ? null : selectedGoalId, rows, (n) => {
+    await onImport(goalName, selectedGoalId === '__new__' ? null : selectedGoalId, selectedGoalId === '__new__' ? newGoal : null, rows, (n) => {
       setProgress(p => Math.min(p + Math.round(n / rows.length * 100), 99));
     });
     setProgress(100);
     setStep('done');
   };
 
-  const goalOk = selectedGoalId && (selectedGoalId !== '__new__' || newGoalName.trim());
+  const goalOk = selectedGoalId && (selectedGoalId !== '__new__' || newGoal.title.trim());
 
   return (
     <Modal title="Import Links from File" g={g} onClose={onClose}>
@@ -754,8 +755,32 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
                   </button>
                 </div>
                 {selectedGoalId === '__new__' && (
-                  <Input g={g} placeholder="New goal name" value={newGoalName}
-                    onChange={e => setNewGoalName(e.target.value)} autoFocus />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10, background: `${g.card}08`, border: `1px solid ${g.surfaceBorder}` }}>
+                    <Input g={g} placeholder="Goal title *" value={newGoal.title}
+                      onChange={e => setNG('title', e.target.value)} autoFocus />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <SectionLabel g={g}>Category</SectionLabel>
+                        <Select g={g} value={newGoal.category} onChange={e => setNG('category', e.target.value)}>
+                          {['Technical','Language','Creative','Business','Science','Other'].map(c => <option key={c}>{c}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <SectionLabel g={g}>Target Hours</SectionLabel>
+                        <Input g={g} type="number" min={1} value={newGoal.target_hours}
+                          onChange={e => setNG('target_hours', Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <div>
+                      <SectionLabel g={g}>Due Date</SectionLabel>
+                      <Input g={g} type="date" value={newGoal.due_date} onChange={e => setNG('due_date', e.target.value)} />
+                    </div>
+                    <div>
+                      <SectionLabel g={g}>Tags (comma separated)</SectionLabel>
+                      <Input g={g} placeholder="e.g. react, frontend" value={newGoal.tags}
+                        onChange={e => setNG('tags', e.target.value)} />
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -795,7 +820,7 @@ function XlsImportModal({ g, goals, onImport, onClose }) {
         {step === 'preview' && (
           <>
             <Text g={g} bold size={13} style={{ display: 'block' }}>
-              {rows.length} topics → {selectedGoalId === '__new__' ? newGoalName : goals.find(g => g.id === selectedGoalId)?.title}
+              {rows.length} topics → {selectedGoalId === '__new__' ? newGoal.title : goals.find(g => g.id === selectedGoalId)?.title}
             </Text>
             <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
               {rows.map((row, i) => (
@@ -940,11 +965,13 @@ export default function Learning({
       {showImport && (
     <XlsImportModal
       g={g} goals={goals}
-      onImport={async (goalName, goalId, rows, onProgress) => {
-        // Find or create goal
+      onImport={async (goalName, goalId, newGoalData, rows, onProgress) => {
         let goal = goalId ? goals.find(g => g.id === goalId) : null;
         if (!goal) {
-          goal = await onAddGoal({ title: goalName, description: 'Imported from file', target_hours: rows.length * 2 });
+          const payload = newGoalData
+            ? { ...newGoalData, tags: newGoalData.tags ? newGoalData.tags.split(',').map(t => t.trim()).filter(Boolean) : [] }
+            : { title: goalName, target_hours: rows.length * 2 };
+          goal = await onAddGoal(payload);
         }
         if (!goal) return;
         for (const row of rows) {
