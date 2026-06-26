@@ -128,11 +128,19 @@ export function parseJSON(raw) {
 
 async function callProvider(provider, model, systemPrompt, userPrompt, config) {
   const req = buildRequest(provider, model, systemPrompt, userPrompt, config);
-  const response = await fetch(req.url, {
-    method: 'POST',
-    headers: req.headers,
-    body: JSON.stringify(req.body),
-  });
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  let response;
+  try {
+    response = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const err = await response.text();

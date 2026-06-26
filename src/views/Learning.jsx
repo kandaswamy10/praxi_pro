@@ -359,20 +359,20 @@ function ActiveGoalCard({
   const [quizReady,    setQuizReady]    = useState({}); // topicId → true when cached
   const quizCache = useRef({});                          // topicId → quiz[]
 
-  // Pre-fetch quiz for a topic silently in background
+  // Pre-fetch quiz silently — never touches aiLoading, never blocks UI
   const prefetchQuiz = async (topic) => {
-    if (quizCache.current[topic.id]) return; // already cached
+    if (!topic || quizCache.current[topic.id]) return;
     try {
       const raw = await callAI('quizGenerate',
         `Topic: ${topic.title}\nGoal: ${goal.title}`,
         'Generate 5 multiple-choice quiz questions for this learning topic. Return JSON array with fields: question, options (array of 4), correct (0-based index), explanation.',
         aiConfig || DEFAULT_AI_CONFIG);
       const quiz = parseJSON(raw);
-      if (quiz?.length) {
+      if (quiz?.length && mountedRef.current) {
         quizCache.current[topic.id] = quiz;
         setQuizReady(prev => ({ ...prev, [topic.id]: true }));
       }
-    } catch {} // silent — user can still tap Quiz to fetch live
+    } catch {} // fully silent
   };
 
   const goalTopics = topics.filter(t => t.goal_id === goal.id)
@@ -412,25 +412,29 @@ function ActiveGoalCard({
   };
 
   const generateQuiz = async (topic) => {
-    // Instant open from cache if available
+    // Instant open from cache
     if (quizCache.current[topic.id]) {
       setActiveQuiz({ quiz: quizCache.current[topic.id], topicTitle: topic.title });
       return;
     }
-    setAiLoading(true); setAiError('');
+    if (!mountedRef.current) return;
+    setQuizLoading(true); setAiError('');
     try {
       const raw = await callAI('quizGenerate',
         `Topic: ${topic.title}\nGoal: ${goal.title}`,
         'Generate 5 multiple-choice quiz questions for this learning topic. Return JSON array with fields: question, options (array of 4), correct (0-based index), explanation.',
         aiConfig || DEFAULT_AI_CONFIG);
       const quiz = parseJSON(raw);
-      if (quiz?.length) {
+      if (quiz?.length && mountedRef.current) {
         quizCache.current[topic.id] = quiz;
         setQuizReady(prev => ({ ...prev, [topic.id]: true }));
         setActiveQuiz({ quiz, topicTitle: topic.title });
       }
-    } catch (e) { setAiError(`Quiz: ${e.message}`); }
-    finally { setAiLoading(false); }
+    } catch (e) {
+      if (mountedRef.current) setAiError(`Quiz: ${e.message}`);
+    } finally {
+      if (mountedRef.current) setQuizLoading(false);
+    }
   };
 
   return (
@@ -535,8 +539,8 @@ function ActiveGoalCard({
                     <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
                       {!topic.is_completed && !locked && (
                         <Btn size="sm" g={g} onClick={() => generateQuiz(topic)}
-                          style={{ opacity: aiLoading && !quizCache.current[topic.id] ? 0.4 : 1 }}>
-                          {quizReady[topic.id] ? '⚡ Quiz' : aiLoading ? '…' : 'Quiz'}
+                          style={{ opacity: quizLoading && !quizCache.current[topic.id] ? 0.4 : 1 }}>
+                          {quizReady[topic.id] ? '⚡ Quiz' : quizLoading ? '…' : 'Quiz'}
                         </Btn>
                       )}
                       {topic.url && (
