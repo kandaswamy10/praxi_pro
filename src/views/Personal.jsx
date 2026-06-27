@@ -50,6 +50,19 @@ const autoEmoji = (name) => {
   return '✅';
 };
 
+// ── BEEP SOUNDS ──────────────────────────────────────────────────────────────
+
+const BEEP_TYPES = [
+  { id: 'ding',   label: '🔔 Ding',   play: (ctx) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(880, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.3); g.gain.setValueAtTime(0.4, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5); o.start(); o.stop(ctx.currentTime + 0.5); } },
+  { id: 'chime',  label: '🎵 Chime',  play: (ctx) => { [523,659,784].forEach((f,i) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0, ctx.currentTime+i*0.15); g.gain.linearRampToValueAtTime(0.3, ctx.currentTime+i*0.15+0.05); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+i*0.15+0.4); o.start(ctx.currentTime+i*0.15); o.stop(ctx.currentTime+i*0.15+0.4); }); } },
+  { id: 'alert',  label: '⚡ Alert',  play: (ctx) => { [0,0.2].forEach(t => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='square'; o.frequency.value=440; g.gain.setValueAtTime(0.15, ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+t+0.15); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.15); }); } },
+  { id: 'soft',   label: '🌙 Soft',   play: (ctx) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=528; g.gain.setValueAtTime(0.2, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.8); o.start(); o.stop(ctx.currentTime+0.8); } },
+  { id: 'urgent', label: '🚨 Urgent', play: (ctx) => { [0,0.15,0.3].forEach(t => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sawtooth'; o.frequency.value=660; g.gain.setValueAtTime(0.15, ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+t+0.1); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.1); }); } },
+];
+function playBeep(id) {
+  try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); (BEEP_TYPES.find(b => b.id === id) || BEEP_TYPES[0]).play(ctx); } catch {}
+}
+
 // ── STORAGE ───────────────────────────────────────────────────────────────────
 
 const DB_KEY = 'praxi:personal:v1';
@@ -67,7 +80,7 @@ function save(data) {
 
 function AddReminderModal({ g, onSave, onClose, initial = {}, selectedDate }) {
   const [form, setForm] = useState({
-    title: '', date: selectedDate || TODAY(), time: '09:00', repeat: 'none', notes: '',
+    title: '', date: selectedDate || TODAY(), time: '09:00', repeat: 'none', notes: '', beep: 'ding',
     ...initial,
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -99,6 +112,20 @@ function AddReminderModal({ g, onSave, onClose, initial = {}, selectedDate }) {
                 color: form.repeat === r ? '#fff' : g.muted,
                 border: `1.5px solid ${form.repeat === r ? g.card : g.surfaceBorder}`,
               }}>{r === 'none' ? 'Once' : r.charAt(0).toUpperCase() + r.slice(1)}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <SectionLabel g={g}>Alert Sound</SectionLabel>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {BEEP_TYPES.map(b => (
+              <button key={b.id} onClick={() => { set('beep', b.id); playBeep(b.id); }} style={{
+                padding: '5px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', border: `1.5px solid ${form.beep === b.id ? g.card : g.surfaceBorder}`,
+                background: form.beep === b.id ? g.card : 'rgba(255,255,255,0.7)',
+                color: form.beep === b.id ? '#fff' : g.text,
+              }}>{b.label}</button>
             ))}
           </div>
         </div>
@@ -291,6 +318,19 @@ function RemindersTab({ g, data, persist, triggerAdd }) {
   const daysInM  = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
   const monthStr = new Date(viewYear, viewMonth, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+  // Play beep when reminder time matches
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now  = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const today = TODAY();
+      (data.reminders || []).forEach(r => {
+        if (r.date === today && r.time === hhmm) playBeep(r.beep || 'ding');
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [data.reminders]);
+
   const reminders = data.reminders || [];
   const remByDate = reminders.reduce((acc, r) => { (acc[r.date] = acc[r.date] || []).push(r); return acc; }, {});
 

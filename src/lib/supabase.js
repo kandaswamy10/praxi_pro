@@ -26,7 +26,7 @@ export const handleAuthCallback = () =>
 export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${import.meta.env.VITE_APP_URL}/auth/callback` },
+    options: { redirectTo: window.location.origin },
   });
 
 export const signOut = () => supabase.auth.signOut();
