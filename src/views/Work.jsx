@@ -675,16 +675,29 @@ function DrawCanvas({ g, canvasRef, initialPages }) {
           background: pageIdx === 0 ? 'rgba(0,0,0,0.04)' : g.card, color: pageIdx === 0 ? g.muted : '#fff',
         }}>‹ Prev</button>
 
-        {/* Page dots */}
-        <div style={{ flex: 1, display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {Array.from({ length: numPages }, (_, i) => (
-            <button key={i} onClick={() => goToPage(i)} style={{
-              width: 26, height: 26, borderRadius: 6, fontSize: 11, fontWeight: 700,
-              border: 'none', cursor: 'pointer',
-              background: i === pageIdx ? g.card : 'rgba(0,0,0,0.08)',
-              color: i === pageIdx ? '#fff' : g.muted,
-            }}>{i + 1}</button>
-          ))}
+        {/* Page dots — show prev, current, next + ellipsis */}
+        <div style={{ flex: 1, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' }}>
+          {(() => {
+            const pageBtn = (i) => (
+              <button key={i} onClick={() => goToPage(i)} style={{
+                width: 26, height: 26, borderRadius: 6, fontSize: 11, fontWeight: 700,
+                border: 'none', cursor: 'pointer',
+                background: i === pageIdx ? g.card : 'rgba(0,0,0,0.08)',
+                color: i === pageIdx ? '#fff' : g.muted,
+              }}>{i + 1}</button>
+            );
+            const dots = <span key="dots" style={{ fontSize: 12, color: g.muted, padding: '0 2px' }}>…</span>;
+            const visible = new Set([pageIdx - 1, pageIdx, pageIdx + 1].filter(i => i >= 0 && i < numPages));
+            const items = [];
+            for (let i = 0; i < numPages; i++) {
+              if (visible.has(i)) { items.push(pageBtn(i)); }
+              else if (i === 0 || i === numPages - 1) { items.push(pageBtn(i)); }
+              else if ((i === 1 && !visible.has(1)) || (i === numPages - 2 && !visible.has(numPages - 2))) {
+                items.push(<span key={`d${i}`} style={{ fontSize: 12, color: g.muted }}>…</span>);
+              }
+            }
+            return items;
+          })()}
           {numPages < MAX_PAGES && (
             <button onClick={addPage} title="Add page" style={{
               width: 26, height: 26, borderRadius: 6, fontSize: 14, fontWeight: 700,
