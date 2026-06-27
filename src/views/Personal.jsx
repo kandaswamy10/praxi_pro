@@ -80,7 +80,7 @@ function save(data) {
 
 function AddReminderModal({ g, onSave, onClose, initial = {}, selectedDate }) {
   const [form, setForm] = useState({
-    title: '', date: selectedDate || TODAY(), time: '09:00', repeat: 'none', notes: '', beep: 'ding',
+    title: '', date: selectedDate || TODAY(), time: '09:00', repeat: 'none', notes: '',
     ...initial,
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -112,20 +112,6 @@ function AddReminderModal({ g, onSave, onClose, initial = {}, selectedDate }) {
                 color: form.repeat === r ? '#fff' : g.muted,
                 border: `1.5px solid ${form.repeat === r ? g.card : g.surfaceBorder}`,
               }}>{r === 'none' ? 'Once' : r.charAt(0).toUpperCase() + r.slice(1)}</button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <SectionLabel g={g}>Alert Sound</SectionLabel>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {BEEP_TYPES.map(b => (
-              <button key={b.id} onClick={() => { set('beep', b.id); playBeep(b.id); }} style={{
-                padding: '5px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', border: `1.5px solid ${form.beep === b.id ? g.card : g.surfaceBorder}`,
-                background: form.beep === b.id ? g.card : 'rgba(255,255,255,0.7)',
-                color: form.beep === b.id ? '#fff' : g.text,
-              }}>{b.label}</button>
             ))}
           </div>
         </div>
@@ -305,7 +291,7 @@ function HabitTab({ g, data, persist }) {
 
 // ── REMINDERS TAB ─────────────────────────────────────────────────────────────
 
-function RemindersTab({ g, data, persist, triggerAdd }) {
+function RemindersTab({ g, data, persist, triggerAdd, onTriggerConsumed }) {
   const now      = new Date();
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -313,7 +299,12 @@ function RemindersTab({ g, data, persist, triggerAdd }) {
   const [showModal, setShowModal] = useState(false);
   const [editItem,  setEditItem]  = useState(null);
 
-  useEffect(() => { if (triggerAdd) setShowModal(true); }, [triggerAdd]);
+  useEffect(() => {
+    if (triggerAdd) {
+      setShowModal(true);
+      onTriggerConsumed?.();
+    }
+  }, [triggerAdd]);
 
   const daysInM  = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
@@ -324,8 +315,9 @@ function RemindersTab({ g, data, persist, triggerAdd }) {
       const now  = new Date();
       const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       const today = TODAY();
+      const globalBeep = localStorage.getItem('praxi:sound') || 'ding';
       (data.reminders || []).forEach(r => {
-        if (r.date === today && r.time === hhmm) playBeep(r.beep || 'ding');
+        if (r.date === today && r.time === hhmm) playBeep(globalBeep);
       });
     }, 30000);
     return () => clearInterval(interval);
@@ -592,7 +584,7 @@ export default function Personal({ g, userId, triggerAdd, onTriggerDone }) {
       </div>
 
       {tab === 'habits'    && <HabitTab     g={g} data={data} persist={persist} />}
-      {tab === 'reminders' && <RemindersTab g={g} data={data} persist={persist} triggerAdd={showAddReminder} />}
+      {tab === 'reminders' && <RemindersTab g={g} data={data} persist={persist} triggerAdd={showAddReminder} onTriggerConsumed={() => setShowAddReminder(false)} />}
       {tab === 'journal'   && <JournalTab   g={g} data={data} persist={persist} />}
 
       {/* Modals */}

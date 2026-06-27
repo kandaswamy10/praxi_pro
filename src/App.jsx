@@ -39,6 +39,7 @@ function PlaceholderView({ tabId, g }) {
         </div>
       ))}
     </div>
+
   );
 }
 
@@ -195,6 +196,7 @@ function AppInner() {
               {[
                 ['⚙️ AI Settings',  () => {}],
                 ['🗂️ Tab Settings', () => {}],
+                ['🔔 Sound Settings', () => setShowSoundSettings(true)],
                 ['↩ Sign out',      () => { signOut(); setShowAvatar(false); }],
               ].map(([label, fn]) => (
                 <button key={label} onClick={() => { fn(); setShowAvatar(false); }}
@@ -262,6 +264,49 @@ function AppInner() {
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
               fontSize: 15, fontWeight: 700 }}>＋ Add Event</button>
         }
+      </div>
+    </div>
+  );
+}
+
+// ── BEEP SOUNDS (shared) ─────────────────────────────────────────────────────
+const BEEP_TYPES = [
+  { id: 'ding',   label: '🔔 Ding',   play: (ctx) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(880, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.3); g.gain.setValueAtTime(0.4, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5); o.start(); o.stop(ctx.currentTime + 0.5); } },
+  { id: 'chime',  label: '🎵 Chime',  play: (ctx) => { [523,659,784].forEach((f,i) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0,ctx.currentTime+i*0.15); g.gain.linearRampToValueAtTime(0.3,ctx.currentTime+i*0.15+0.05); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.15+0.4); o.start(ctx.currentTime+i*0.15); o.stop(ctx.currentTime+i*0.15+0.4); }); } },
+  { id: 'alert',  label: '⚡ Alert',  play: (ctx) => { [0,0.2].forEach(t => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='square'; o.frequency.value=440; g.gain.setValueAtTime(0.15,ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.15); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.15); }); } },
+  { id: 'soft',   label: '🌙 Soft',   play: (ctx) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=528; g.gain.setValueAtTime(0.2,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.8); o.start(); o.stop(ctx.currentTime+0.8); } },
+  { id: 'urgent', label: '🚨 Urgent', play: (ctx) => { [0,0.15,0.3].forEach(t => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sawtooth'; o.frequency.value=660; g.gain.setValueAtTime(0.15,ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.1); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.1); }); } },
+];
+function playBeep(id) {
+  try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); (BEEP_TYPES.find(b => b.id === id) || BEEP_TYPES[0]).play(ctx); } catch {}
+}
+
+function SoundSettingsModal({ g, onClose }) {
+  const [current, setCurrent] = useState(localStorage.getItem('praxi:sound') || 'ding');
+  const pick = (id) => { setCurrent(id); localStorage.setItem('praxi:sound', id); playBeep(id); };
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: g.pageBg || '#f0f4ff', borderRadius: 18, width: '100%', maxWidth: 360, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: g.text }}>🔔 Reminder Sound</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: g.muted }}>✕</button>
+        </div>
+        <p style={{ fontSize: 13, color: g.muted, margin: 0 }}>Used for all reminders across the app. Tap to preview.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {BEEP_TYPES.map(b => (
+            <button key={b.id} onClick={() => pick(b.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+              borderRadius: 12, cursor: 'pointer', border: `2px solid ${current === b.id ? g.card : g.surfaceBorder}`,
+              background: current === b.id ? `${g.card}14` : 'rgba(255,255,255,0.75)',
+              fontFamily: 'system-ui', width: '100%',
+            }}>
+              <span style={{ fontSize: 20 }}>{b.label.split(' ')[0]}</span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: g.text, textAlign: 'left' }}>{b.label.split(' ').slice(1).join(' ')}</span>
+              {current === b.id && <span style={{ color: g.card, fontSize: 16 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} style={{ background: g.card, border: 'none', borderRadius: 12, padding: '12px 0', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Done</button>
       </div>
     </div>
   );

@@ -149,7 +149,7 @@ function AddCalEntryModal({ g, onSave, onClose, initial = {}, selectedDate }) {
   const [form, setForm] = useState({
     type: 'reminder', title: '', date: selectedDate || TODAY(),
     time: '09:00', amount: '', currency: '₹', person: '',
-    notes: '', beep: 'ding', repeat: 'none', done: false,
+    notes: '', repeat: 'none', done: false,
     ...initial,
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -206,21 +206,6 @@ function AddCalEntryModal({ g, onSave, onClose, initial = {}, selectedDate }) {
             </div>
           </div>
         )}
-
-        {/* Beep selector */}
-        <div>
-          <SectionLabel g={g}>Alert Sound</SectionLabel>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {BEEP_TYPES.map(b => (
-              <button key={b.id} onClick={() => { set('beep', b.id); playBeep(b.id); }} style={{
-                padding: '5px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', border: `1.5px solid ${form.beep === b.id ? g.card : g.surfaceBorder}`,
-                background: form.beep === b.id ? g.card : 'rgba(255,255,255,0.7)',
-                color: form.beep === b.id ? '#fff' : g.text,
-              }}>{b.label}</button>
-            ))}
-          </div>
-        </div>
 
         {/* Repeat */}
         <div>
@@ -353,7 +338,7 @@ function CalendarSection({ g, data, persist, triggerAdd }) {
       const today = TODAY();
       (data.calEntries || []).forEach(e => {
         if (!e.done && e.type === 'reminder' && e.date === today && e.time === hhmm) {
-          playBeep(e.beep || 'ding');
+          playBeep(localStorage.getItem('praxi:sound') || 'ding');
         }
       });
     }, 30000);
