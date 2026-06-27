@@ -445,7 +445,7 @@ function StatsStrip({ events, g }) {
 const PAGE_H  = 1400;
 const MAX_PAGES = 10;
 
-function DrawCanvas({ g, canvasRef, initialPages }) {
+function DrawCanvas({ g, canvasRef, initialPages, onDirty }) {
   const isDrawing  = useRef(false);
   const ctxRef     = useRef(null);
   const scrollRef  = useRef(null);
@@ -571,6 +571,7 @@ function DrawCanvas({ g, canvasRef, initialPages }) {
       isDrawing.current = true;
       ctxRef.current.beginPath();
       ctxRef.current.moveTo(pt.x, pt.y);
+      onDirty?.();
     };
     const onMove = (e) => {
       if (!isDrawing.current) return;
@@ -871,6 +872,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
   const [content, setContent] = useState(initial.content  || '');
   const [eventId, setEventId] = useState(initial.event_id || '');
   const [mode,    setMode]    = useState('text');
+  const [drawDirty, setDrawDirty] = useState(false);
   const canvasRef = useRef(null);
 
   const workEvents = events.filter(e => !e.is_completed);
@@ -880,7 +882,16 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
     if (!title.trim()) return;
     const drawPages = canvasRef.current?.getPages?.() || null;
     onSave({ ...initial, title, content, draw_data: drawPages, event_id: eventId || null, tab: 'work' });
+    setDrawDirty(false);
     setEditing(false);
+  };
+
+  const handleClose = () => {
+    if (drawDirty) {
+      const choice = window.confirm('You have unsaved drawings. Save before closing?');
+      if (choice) { handleSave(); return; }
+    }
+    onClose();
   };
 
   const handleDelete = () => {
@@ -905,7 +916,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '12px 16px', background: g.card, flexShrink: 0,
         }}>
-          <button onClick={onClose} style={{
+          <button onClick={handleClose} style={{
             background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8,
             padding: '4px 10px', color: '#fff', fontSize: 18, cursor: 'pointer',
           }}>←</button>
@@ -1017,7 +1028,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
                 </div>
           )}
           {mode === 'draw' && (
-            <DrawCanvas g={g} canvasRef={canvasRef} initialPages={Array.isArray(initial.draw_data) ? initial.draw_data : initial.draw_data ? [initial.draw_data] : []} />
+            <DrawCanvas g={g} canvasRef={canvasRef} initialPages={Array.isArray(initial.draw_data) ? initial.draw_data : initial.draw_data ? [initial.draw_data] : []} onDirty={() => setDrawDirty(true)} />
           )}
         </div>
 
