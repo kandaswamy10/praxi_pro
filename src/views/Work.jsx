@@ -438,21 +438,40 @@ function StatsStrip({ events, g }) {
 // Keyboard typing always goes to the text layer regardless of mode.
 
 // ── DRAW CANVAS ──────────────────────────────────────────────────────────────
-// All sizing is imperative (DOM refs). No React state for height — avoids
-// bitmap wipe on re-render. extendCanvas() grows the canvas in-place.
+// Multi-page canvas: up to 10 pages, prev/next navigation.
+// Each page is an independent canvas bitmap stored as dataURL on page change.
+// Exposed via canvasRef.getPages() for saving.
 
-const PAGE_H = 1400;
+const PAGE_H  = 1400;
+const MAX_PAGES = 10;
 
-function DrawCanvas({ g, canvasRef, initialDataUrl }) {
-  const isDrawing = useRef(false);
-  const ctxRef    = useRef(null);
-  const scrollRef = useRef(null);
-  const penRef    = useRef({ color: '#1a1a2e', size: 2.5, erasing: false });
+function DrawCanvas({ g, canvasRef, initialPages }) {
+  const isDrawing  = useRef(false);
+  const ctxRef     = useRef(null);
+  const scrollRef  = useRef(null);
+  const innerRef   = useRef(null); // actual <canvas> element
+  const penRef     = useRef({ color: '#1a1a2e', size: 2.5, erasing: false });
+  const pagesRef   = useRef([]); // array of dataURLs, one per page
   const [penColor, setPenColor] = useState('#1a1a2e');
   const [penSize,  setPenSize]  = useState(2.5);
   const [erasing,  setErasing]  = useState(false);
+  const [pageIdx,  setPageIdx]  = useState(0);
+  const [numPages, setNumPages] = useState(1);
 
-  // Keep penRef in sync so pointer handlers see latest values without re-binding
+  // Expose getPages() via canvasRef so NoteModal can save
+  useEffect(() => {
+    if (!canvasRef) return;
+    canvasRef.current = {
+      getPages: () => {
+        // Flush current canvas to pagesRef before returning
+        const canvas = innerRef.current;
+        if (canvas) pagesRef.current[pageIdx] = canvas.toDataURL();
+        return [...pagesRef.current];
+      },
+    };
+  }, [pageIdx]);
+
+  // Keep penRef synced
   useEffect(() => {
     penRef.current = { color: penColor, size: penSize, erasing };
     if (!ctxRef.current) return;
@@ -460,25 +479,18 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
     ctxRef.current.lineWidth   = erasing ? 20 : penSize;
   }, [penColor, penSize, erasing]);
 
-  // Mount once: init bitmap, restore saved image, bind all pointer events
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+  const initCanvas = (canvas, dataUrl) => {
     const cw = canvas.offsetWidth || 600;
     canvas.width  = cw;
     canvas.height = PAGE_H;
     canvas.style.height = PAGE_H + 'px';
-
     const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = penRef.current.color;
-    ctx.lineWidth   = penRef.current.size;
+    ctx.strokeStyle = penRef.current.erasing ? '#ffffff' : penRef.current.color;
+    ctx.lineWidth   = penRef.current.erasing ? 20 : penRef.current.size;
     ctx.lineCap  = 'round';
     ctx.lineJoin = 'round';
     ctxRef.current = ctx;
-
-    // Restore saved drawing
-    if (initialDataUrl) {
+    if (dataUrl) {
       const img = new Image();
       img.onload = () => {
         if (img.naturalHeight > canvas.height) {
@@ -489,15 +501,45 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
         ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight,
                           0, 0, canvas.width, img.naturalHeight);
       };
-      img.src = initialDataUrl;
+      img.src = dataUrl;
     }
+  };
+
+  // Mount: init pages array from saved data, load page 0
+  useEffect(() => {
+    // Initialise pagesRef from saved pages or empty
+    const saved = Array.isArray(initialPages) && initialPages.length
+      ? [...initialPages]
+      : [null];
+    pagesRef.current = saved;
+    setNumPages(saved.length);
+    setPageIdx(0);
+  }, []);
+
+  // When pageIdx changes, re-init the canvas with the right page's dataUrl
+  useEffect(() => {
+    const canvas = innerRef.current;
+    if (!canvas) return;
+    // Scroll to top when switching pages
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    initCanvas(canvas, pagesRef.current[pageIdx] || null);
+  }, [pageIdx]);
+
+  // Bind pointer events once, read pageIdx via ref to avoid re-binding
+  const pageIdxRef = useRef(0);
+  useEffect(() => { pageIdxRef.current = pageIdx; }, [pageIdx]);
+
+  useEffect(() => {
+    const canvas = innerRef.current;
+    if (!canvas) return;
 
     const applyPen = () => {
       const p = penRef.current;
-      ctx.strokeStyle = p.erasing ? '#ffffff' : p.color;
-      ctx.lineWidth   = p.erasing ? 20 : p.size;
-      ctx.lineCap  = 'round';
-      ctx.lineJoin = 'round';
+      if (!ctxRef.current) return;
+      ctxRef.current.strokeStyle = p.erasing ? '#ffffff' : p.color;
+      ctxRef.current.lineWidth   = p.erasing ? 20 : p.size;
+      ctxRef.current.lineCap  = 'round';
+      ctxRef.current.lineJoin = 'round';
     };
 
     const getPos = (e) => {
@@ -512,14 +554,13 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
       const r = canvas.getBoundingClientRect();
       const yBitmap = (e.clientY - r.top) * (canvas.height / r.height);
       if (yBitmap < canvas.height - 300) return;
-      // Grow canvas in-place
       const tmp = document.createElement('canvas');
       tmp.width = canvas.width; tmp.height = canvas.height;
       tmp.getContext('2d').drawImage(canvas, 0, 0);
       const newH = canvas.height + PAGE_H;
       canvas.height = newH;
       canvas.style.height = newH + 'px';
-      ctx.drawImage(tmp, 0, 0);
+      ctxRef.current.drawImage(tmp, 0, 0);
       applyPen();
     };
 
@@ -528,22 +569,20 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
       applyPen();
       const pt = getPos(e);
       isDrawing.current = true;
-      ctx.beginPath();
-      ctx.moveTo(pt.x, pt.y);
+      ctxRef.current.beginPath();
+      ctxRef.current.moveTo(pt.x, pt.y);
     };
-
     const onMove = (e) => {
       if (!isDrawing.current) return;
       e.preventDefault();
       const pt = getPos(e);
-      ctx.lineTo(pt.x, pt.y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(pt.x, pt.y);
+      ctxRef.current.lineTo(pt.x, pt.y);
+      ctxRef.current.stroke();
+      ctxRef.current.beginPath();
+      ctxRef.current.moveTo(pt.x, pt.y);
       extendIfNeeded(e);
     };
-
-    const onUp = () => { isDrawing.current = false; ctx.beginPath(); };
+    const onUp = () => { isDrawing.current = false; ctxRef.current?.beginPath(); };
 
     canvas.addEventListener('pointerdown',   onDown, { passive: false });
     canvas.addEventListener('pointermove',   onMove, { passive: false });
@@ -559,15 +598,33 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
     };
   }, []);
 
+  // Save current page bitmap to pagesRef, then switch
+  const goToPage = (idx) => {
+    const canvas = innerRef.current;
+    if (canvas) pagesRef.current[pageIdx] = canvas.toDataURL();
+    setPageIdx(idx);
+  };
+
+  const addPage = () => {
+    const canvas = innerRef.current;
+    if (canvas) pagesRef.current[pageIdx] = canvas.toDataURL();
+    const newIdx = pagesRef.current.length;
+    pagesRef.current.push(null);
+    setNumPages(pagesRef.current.length);
+    setPageIdx(newIdx);
+  };
+
   const clearCanvas = () => {
-    const c = canvasRef.current;
+    const c = innerRef.current;
     if (c && ctxRef.current) ctxRef.current.clearRect(0, 0, c.width, c.height);
+    pagesRef.current[pageIdx] = null;
   };
 
   const linesBg = `repeating-linear-gradient(transparent, transparent 27px, ${g.surfaceBorder}44 28px)`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+
       {/* Toolbar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', flexWrap: 'wrap',
@@ -607,7 +664,49 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
         }}>Clear</button>
       </div>
 
-      {/* Scroll wrapper — must have explicit height for overflow to work */}
+      {/* Page navigation bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+        background: `${g.card}08`, borderBottom: `1px solid ${g.surfaceBorder}`,
+        flexShrink: 0,
+      }}>
+        <button onClick={() => goToPage(pageIdx - 1)} disabled={pageIdx === 0} style={{
+          padding: '3px 12px', borderRadius: 6, fontSize: 13, border: 'none', cursor: pageIdx === 0 ? 'default' : 'pointer',
+          background: pageIdx === 0 ? 'rgba(0,0,0,0.04)' : g.card, color: pageIdx === 0 ? g.muted : '#fff',
+        }}>‹ Prev</button>
+
+        {/* Page dots */}
+        <div style={{ flex: 1, display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {Array.from({ length: numPages }, (_, i) => (
+            <button key={i} onClick={() => goToPage(i)} style={{
+              width: 26, height: 26, borderRadius: 6, fontSize: 11, fontWeight: 700,
+              border: 'none', cursor: 'pointer',
+              background: i === pageIdx ? g.card : 'rgba(0,0,0,0.08)',
+              color: i === pageIdx ? '#fff' : g.muted,
+            }}>{i + 1}</button>
+          ))}
+          {numPages < MAX_PAGES && (
+            <button onClick={addPage} title="Add page" style={{
+              width: 26, height: 26, borderRadius: 6, fontSize: 14, fontWeight: 700,
+              border: `1.5px dashed ${g.surfaceBorder}`, cursor: 'pointer',
+              background: 'transparent', color: g.muted,
+            }}>＋</button>
+          )}
+        </div>
+
+        <button onClick={() => goToPage(pageIdx + 1)} disabled={pageIdx === numPages - 1} style={{
+          padding: '3px 12px', borderRadius: 6, fontSize: 13, border: 'none',
+          cursor: pageIdx === numPages - 1 ? 'default' : 'pointer',
+          background: pageIdx === numPages - 1 ? 'rgba(0,0,0,0.04)' : g.card,
+          color: pageIdx === numPages - 1 ? g.muted : '#fff',
+        }}>Next ›</button>
+
+        <span style={{ fontSize: 11, color: g.muted, marginLeft: 4, flexShrink: 0 }}>
+          {pageIdx + 1} / {numPages}
+        </span>
+      </div>
+
+      {/* Canvas scroll area */}
       <div ref={scrollRef} style={{
         flex: 1, overflowY: 'scroll', overflowX: 'hidden', minHeight: 0,
         background: 'white',
@@ -615,7 +714,7 @@ function DrawCanvas({ g, canvasRef, initialDataUrl }) {
         backgroundSize: '100% 28px',
         backgroundPositionY: '4px',
       }}>
-        <canvas ref={canvasRef} style={{
+        <canvas ref={innerRef} style={{
           display: 'block', width: '100%',
           touchAction: 'none',
           cursor: erasing ? 'cell' : 'crosshair',
@@ -766,8 +865,8 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
 
   const handleSave = () => {
     if (!title.trim()) return;
-    const drawDataUrl = canvasRef.current?.toDataURL?.() || null;
-    onSave({ ...initial, title, content, draw_data: drawDataUrl, event_id: eventId || null, tab: 'work' });
+    const drawPages = canvasRef.current?.getPages?.() || null;
+    onSave({ ...initial, title, content, draw_data: drawPages, event_id: eventId || null, tab: 'work' });
     setEditing(false);
   };
 
@@ -905,7 +1004,7 @@ function NoteModal({ g, initial = {}, events, onSave, onClose, onDelete, aiConfi
                 </div>
           )}
           {mode === 'draw' && (
-            <DrawCanvas g={g} canvasRef={canvasRef} initialDataUrl={initial.draw_data || null} />
+            <DrawCanvas g={g} canvasRef={canvasRef} initialPages={Array.isArray(initial.draw_data) ? initial.draw_data : initial.draw_data ? [initial.draw_data] : []} />
           )}
         </div>
 
