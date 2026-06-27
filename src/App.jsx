@@ -58,8 +58,7 @@ function AppInner() {
     <div style={{ minHeight: '100vh', background: GEMS.dashboard.bg,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       flexDirection: 'column', gap: 16, fontFamily: 'system-ui' }}>
-      <div style={{ fontSize: 32, fontWeight: 800, color: GEMS.dashboard.text,
-        fontFamily: 'Georgia, serif' }}>Praxi Pro</div>
+      <img src="/logo-icon.svg" alt="Praxi Pro" style={{ width: 96, height: 96, borderRadius: 22 }} />
       <div style={{ fontSize: 13, color: GEMS.dashboard.muted, fontStyle: 'italic' }}>
         Plan. Learn. Relax.
       </div>
@@ -167,7 +166,7 @@ function AppInner() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '12px 18px 0', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 20, fontWeight: 800, color: g.text, fontFamily: 'Georgia, serif' }}>Praxi Pro</span>
+          <img src="/logo-inapp.svg" alt="Praxi Pro" style={{ height: 36, width: 'auto' }} />
           <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999,
             background: `${g.card}18`, color: g.accent, fontWeight: 600 }}>
             {g.gem} {g.name}

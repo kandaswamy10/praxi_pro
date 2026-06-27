@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="224" fill="#0f0f18"/>
+  <!-- flower symbol centred, scaled up -->
+  <g transform="translate(512,460) scale(7)">
+    <ellipse cx="0" cy="-27" rx="13" ry="23" fill="#1db954" opacity="0.92"/>
+    <ellipse cx="0" cy="-27" rx="13" ry="23" transform="rotate(72)"  fill="#e8173a" opacity="0.92"/>
+    <ellipse cx="0" cy="-27" rx="13" ry="23" transform="rotate(144)" fill="#f5a623" opacity="0.92"/>
+    <ellipse cx="0" cy="-27" rx="13" ry="23" transform="rotate(216)" fill="#1565c0" opacity="0.92"/>
+    <ellipse cx="0" cy="-27" rx="13" ry="23" transform="rotate(288)" fill="#7b2fbe" opacity="0.92"/>
+    <circle cx="0" cy="0" r="11" fill="#0f0f18"/>
+    <circle cx="0" cy="0" r="4"  fill="white" opacity="0.75"/>
+  </g>
+  <!-- PRAXI label at bottom -->
+  <text x="512" y="870" font-family="Arial" font-weight="900" font-size="112" letter-spacing="20" fill="white" text-anchor="middle">PRAXI</text>
+</svg>
