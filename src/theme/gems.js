@@ -129,7 +129,7 @@ export const ALL_TABS = [
   { id: 'work',      label: 'Work',      icon: '💼' },
   { id: 'learning',  label: 'Learning',  icon: '📚' },
   { id: 'personal',  label: 'Personal',  icon: '🌟' },
-  // { id: 'finance', label: 'Finance', icon: '💰' }, // disabled
+  { id: 'finance', label: 'Finance', icon: '💰' },
 ];
 
 export const REQUIRED_TABS = ['dashboard'];

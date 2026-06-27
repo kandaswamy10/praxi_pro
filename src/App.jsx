@@ -9,6 +9,7 @@ import Dashboard from './views/Dashboard.jsx';
 import Learning from './views/Learning.jsx';
 import Work from './views/Work.jsx';
 import Personal from './views/Personal.jsx';
+import Finance  from './views/Finance.jsx';
 import { AlarmBanner, Surface, Text } from './components/ui.jsx';
 
 const ADS = {
@@ -51,7 +52,8 @@ function AppInner() {
   const [showAvatar, setShowAvatar]     = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
-  const [showAddHabit, setShowAddHabit] = useState(false);
+  const [showAddHabit,   setShowAddHabit]   = useState(false);
+  const [showAddFinance, setShowAddFinance] = useState(false);
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) return (
@@ -130,6 +132,9 @@ function AppInner() {
           g={g} userId={session.user.id}
           triggerAdd={showAddHabit} onTriggerDone={() => setShowAddHabit(false)}
         />
+      );
+      case 'finance': return (
+        <Finance g={g} triggerAdd={showAddFinance} onTriggerDone={() => setShowAddFinance(false)} />
       );
       default: return <PlaceholderView tabId={tab} g={g} />;
     }
@@ -242,6 +247,11 @@ function AppInner() {
               fontSize: 15, fontWeight: 700 }}>＋ Add Goal</button>
           : tab === 'personal'
           ? <button onClick={() => setShowAddHabit(true)} style={{
+              background: g.card, border: 'none', borderRadius: 999,
+              flex: 1, height: 42, cursor: 'pointer', color: '#fff',
+              fontSize: 15, fontWeight: 700 }}>＋ Add</button>
+          : tab === 'finance'
+          ? <button onClick={() => setShowAddFinance(true)} style={{
               background: g.card, border: 'none', borderRadius: 999,
               flex: 1, height: 42, cursor: 'pointer', color: '#fff',
               fontSize: 15, fontWeight: 700 }}>＋ Add</button>
